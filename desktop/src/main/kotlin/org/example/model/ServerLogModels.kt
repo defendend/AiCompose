@@ -23,6 +23,8 @@ enum class ServerLogCategory {
     RESPONSE,
     LLM_REQUEST,
     LLM_RESPONSE,
+    LLM_RAW_REQUEST,
+    LLM_RAW_RESPONSE,
     TOOL_CALL,
     TOOL_RESULT,
     SYSTEM

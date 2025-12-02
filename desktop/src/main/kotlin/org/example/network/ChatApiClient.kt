@@ -3,6 +3,7 @@ package org.example.network
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
@@ -23,6 +24,11 @@ class ChatApiClient(
                 isLenient = true
                 ignoreUnknownKeys = true
             })
+        }
+        install(HttpTimeout) {
+            requestTimeoutMillis = 60000
+            connectTimeoutMillis = 10000
+            socketTimeoutMillis = 60000
         }
     }
 

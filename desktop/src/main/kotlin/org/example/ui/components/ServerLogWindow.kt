@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -292,15 +293,16 @@ private fun ServerLogEntryRow(log: ServerLogEntry) {
                     )
                 }
 
-                Text(
-                    text = log.message,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
+                SelectionContainer(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = log.message,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
 
             AnimatedVisibility(
@@ -316,22 +318,24 @@ private fun ServerLogEntryRow(log: ServerLogEntry) {
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                         shape = RoundedCornerShape(4.dp)
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .padding(8.dp)
-                                .horizontalScroll(rememberScrollState())
-                        ) {
-                            details.method?.let { DetailRow("Method", it) }
-                            details.path?.let { DetailRow("Path", it) }
-                            details.statusCode?.let { DetailRow("Status", it.toString()) }
-                            details.conversationId?.let { DetailRow("Conversation", it) }
-                            details.model?.let { DetailRow("Model", it) }
-                            details.toolName?.let { DetailRow("Tool", it) }
-                            details.toolArguments?.let { DetailRow("Arguments", it) }
-                            details.toolResult?.let { DetailRow("Result", it) }
-                            details.requestBody?.let { DetailRow("Request Body", it) }
-                            details.responseBody?.let { DetailRow("Response Body", it) }
-                            details.error?.let { DetailRow("Error", it) }
+                        SelectionContainer {
+                            Column(
+                                modifier = Modifier
+                                    .padding(8.dp)
+                                    .horizontalScroll(rememberScrollState())
+                            ) {
+                                details.method?.let { DetailRow("Method", it) }
+                                details.path?.let { DetailRow("Path", it) }
+                                details.statusCode?.let { DetailRow("Status", it.toString()) }
+                                details.conversationId?.let { DetailRow("Conversation", it) }
+                                details.model?.let { DetailRow("Model", it) }
+                                details.toolName?.let { DetailRow("Tool", it) }
+                                details.toolArguments?.let { DetailRow("Arguments", it) }
+                                details.toolResult?.let { DetailRow("Result", it) }
+                                details.requestBody?.let { DetailRow("Request Body", it) }
+                                details.responseBody?.let { DetailRow("Response Body", it) }
+                                details.error?.let { DetailRow("Error", it) }
+                            }
                         }
                     }
                 }
@@ -377,6 +381,8 @@ private fun getCategoryColor(category: ServerLogCategory): Color {
         ServerLogCategory.RESPONSE -> Color(0xFF8BC34A)
         ServerLogCategory.LLM_REQUEST -> Color(0xFF9C27B0)
         ServerLogCategory.LLM_RESPONSE -> Color(0xFFE91E63)
+        ServerLogCategory.LLM_RAW_REQUEST -> Color(0xFF673AB7)
+        ServerLogCategory.LLM_RAW_RESPONSE -> Color(0xFFAD1457)
         ServerLogCategory.TOOL_CALL -> Color(0xFFFF9800)
         ServerLogCategory.TOOL_RESULT -> Color(0xFFFFC107)
         ServerLogCategory.SYSTEM -> Color(0xFF607D8B)
@@ -389,6 +395,8 @@ private fun getCategoryLabel(category: ServerLogCategory): String {
         ServerLogCategory.RESPONSE -> "RES"
         ServerLogCategory.LLM_REQUEST -> "LLM-REQ"
         ServerLogCategory.LLM_RESPONSE -> "LLM-RES"
+        ServerLogCategory.LLM_RAW_REQUEST -> "RAW-REQ"
+        ServerLogCategory.LLM_RAW_RESPONSE -> "RAW-RES"
         ServerLogCategory.TOOL_CALL -> "TOOL"
         ServerLogCategory.TOOL_RESULT -> "TOOL-RES"
         ServerLogCategory.SYSTEM -> "SYS"

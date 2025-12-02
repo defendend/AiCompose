@@ -22,13 +22,15 @@ enum class LogLevel {
 
 @Serializable
 enum class LogCategory {
-    REQUEST,      // Входящий запрос
-    RESPONSE,     // Исходящий ответ
-    LLM_REQUEST,  // Запрос к DeepSeek
-    LLM_RESPONSE, // Ответ от DeepSeek
-    TOOL_CALL,    // Вызов инструмента
-    TOOL_RESULT,  // Результат инструмента
-    SYSTEM        // Системные события
+    REQUEST,          // Входящий запрос
+    RESPONSE,         // Исходящий ответ
+    LLM_REQUEST,      // Запрос к DeepSeek (превью)
+    LLM_RESPONSE,     // Ответ от DeepSeek (превью)
+    LLM_RAW_REQUEST,  // Полный JSON запрос к DeepSeek
+    LLM_RAW_RESPONSE, // Полный JSON ответ от DeepSeek
+    TOOL_CALL,        // Вызов инструмента
+    TOOL_RESULT,      // Результат инструмента
+    SYSTEM            // Системные события
 }
 
 @Serializable

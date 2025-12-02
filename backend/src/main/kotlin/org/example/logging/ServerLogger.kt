@@ -61,7 +61,8 @@ object ServerLogger {
         model: String,
         messagesCount: Int,
         toolsCount: Int,
-        conversationId: String?
+        conversationId: String?,
+        messagesPreview: String? = null
     ) {
         val entry = ServerLogEntry(
             level = LogLevel.DEBUG,
@@ -69,7 +70,8 @@ object ServerLogger {
             message = "LLM Request: $messagesCount messages, $toolsCount tools",
             details = LogDetails(
                 model = model,
-                conversationId = conversationId
+                conversationId = conversationId,
+                requestBody = messagesPreview
             )
         )
         addLog(entry)
@@ -96,6 +98,40 @@ object ServerLogger {
         )
         addLog(entry)
         logger.debug("[LLM_RESPONSE] HasToolCalls: $hasToolCalls, Duration: ${durationMs}ms")
+    }
+
+    fun logLLMRawRequest(
+        rawJson: String,
+        conversationId: String?
+    ) {
+        val entry = ServerLogEntry(
+            level = LogLevel.DEBUG,
+            category = LogCategory.LLM_RAW_REQUEST,
+            message = "Raw LLM Request",
+            details = LogDetails(
+                requestBody = rawJson,
+                conversationId = conversationId
+            )
+        )
+        addLog(entry)
+    }
+
+    fun logLLMRawResponse(
+        rawJson: String,
+        durationMs: Long,
+        conversationId: String?
+    ) {
+        val entry = ServerLogEntry(
+            level = LogLevel.DEBUG,
+            category = LogCategory.LLM_RAW_RESPONSE,
+            message = "Raw LLM Response (${durationMs}ms)",
+            details = LogDetails(
+                responseBody = rawJson,
+                durationMs = durationMs,
+                conversationId = conversationId
+            )
+        )
+        addLog(entry)
     }
 
     fun logToolCall(
