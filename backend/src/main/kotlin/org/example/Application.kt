@@ -14,6 +14,8 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
 import org.example.agent.Agent
 import org.example.api.chatRoutes
+import org.example.logging.ServerLogger
+import org.example.model.LogLevel
 import org.slf4j.LoggerFactory
 import org.slf4j.event.Level
 
@@ -24,6 +26,7 @@ fun main() {
         ?: throw RuntimeException("DEEPSEEK_API_KEY environment variable is not set")
 
     logger.info("Запуск сервера AiCompose Backend...")
+    ServerLogger.logSystem("Запуск сервера AiCompose Backend...", LogLevel.INFO)
 
     val agent = Agent(apiKey = apiKey)
 
@@ -42,6 +45,7 @@ fun main() {
             allowHeader(HttpHeaders.Authorization)
             allowMethod(HttpMethod.Get)
             allowMethod(HttpMethod.Post)
+            allowMethod(HttpMethod.Delete)
             allowMethod(HttpMethod.Options)
         }
 

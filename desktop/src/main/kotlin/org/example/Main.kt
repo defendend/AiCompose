@@ -10,16 +10,20 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.*
 import org.example.logging.AppLogger
+import org.example.network.ChatApiClient
 import org.example.ui.ChatViewModel
 import org.example.ui.components.ChatScreen
 import org.example.ui.components.LogWindow
+import org.example.ui.components.ServerLogWindow
 import org.example.ui.theme.AppTheme
 
 fun main() = application {
     AppLogger.info("App", "Приложение запущено")
 
     var showLogWindow by remember { mutableStateOf(false) }
+    var showServerLogWindow by remember { mutableStateOf(false) }
     val chatViewModel = remember { ChatViewModel() }
+    val apiClient = remember { ChatApiClient() }
 
     Window(
         onCloseRequest = ::exitApplication,
@@ -31,7 +35,8 @@ fun main() = application {
         AppTheme {
             MainContent(
                 chatViewModel = chatViewModel,
-                onToggleLogs = { showLogWindow = !showLogWindow }
+                onToggleLogs = { showLogWindow = !showLogWindow },
+                onToggleServerLogs = { showServerLogWindow = !showServerLogWindow }
             )
         }
     }
@@ -41,12 +46,20 @@ fun main() = application {
             onCloseRequest = { showLogWindow = false }
         )
     }
+
+    if (showServerLogWindow) {
+        ServerLogWindow(
+            apiClient = apiClient,
+            onCloseRequest = { showServerLogWindow = false }
+        )
+    }
 }
 
 @Composable
 private fun MainContent(
     chatViewModel: ChatViewModel,
-    onToggleLogs: () -> Unit
+    onToggleLogs: () -> Unit,
+    onToggleServerLogs: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Top App Bar
@@ -57,14 +70,18 @@ private fun MainContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 IconButton(onClick = onToggleLogs) {
                     Icon(
                         Icons.Default.Menu,
-                        contentDescription = "Открыть логи",
+                        contentDescription = "Локальные логи",
                         tint = MaterialTheme.colorScheme.onSurface
                     )
+                }
+                TextButton(onClick = onToggleServerLogs) {
+                    Text("Серверные логи")
                 }
             }
         }

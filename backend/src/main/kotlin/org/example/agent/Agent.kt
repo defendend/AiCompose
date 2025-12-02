@@ -8,17 +8,15 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
+import org.example.logging.ServerLogger
 import org.example.model.*
 import org.example.tools.ToolRegistry
-import org.slf4j.LoggerFactory
 
 class Agent(
     private val apiKey: String,
     private val model: String = "deepseek-chat",
     private val baseUrl: String = "https://api.deepseek.com/v1"
 ) {
-    private val logger = LoggerFactory.getLogger(Agent::class.java)
-
     private val client = HttpClient(CIO) {
         install(ContentNegotiation) {
             json(Json {
@@ -32,8 +30,6 @@ class Agent(
     private val conversations = mutableMapOf<String, MutableList<LLMMessage>>()
 
     suspend fun chat(userMessage: String, conversationId: String): ChatResponse {
-        logger.info("Получен запрос: $userMessage (conversation: $conversationId)")
-
         // Получаем или создаём историю диалога
         val history = conversations.getOrPut(conversationId) {
             mutableListOf(
@@ -55,7 +51,7 @@ class Agent(
         history.add(LLMMessage(role = "user", content = userMessage))
 
         // Вызываем LLM
-        val response = callLLM(history)
+        val response = callLLM(history, conversationId)
 
         // Обрабатываем ответ
         val assistantMessage = response.choices.firstOrNull()?.message
@@ -63,8 +59,6 @@ class Agent(
 
         // Проверяем, есть ли вызов инструмента
         if (assistantMessage.tool_calls != null && assistantMessage.tool_calls.isNotEmpty()) {
-            logger.info("Агент вызывает инструменты: ${assistantMessage.tool_calls.map { it.function.name }}")
-
             // Добавляем ответ ассистента с tool_calls (убеждаемся что type заполнен)
             val fixedToolCalls = assistantMessage.tool_calls.map { tc ->
                 LLMToolCall(
@@ -80,11 +74,13 @@ class Agent(
                 val toolName = toolCall.function.name
                 val toolArgs = toolCall.function.arguments
 
-                logger.info("Выполняю инструмент: $toolName с аргументами: $toolArgs")
+                ServerLogger.logToolCall(toolName, toolArgs, conversationId)
 
+                val toolStartTime = System.currentTimeMillis()
                 val toolResult = ToolRegistry.executeTool(toolName, toolArgs)
+                val toolDuration = System.currentTimeMillis() - toolStartTime
 
-                logger.info("Результат инструмента $toolName: $toolResult")
+                ServerLogger.logToolResult(toolName, toolResult, toolDuration, conversationId)
 
                 // Добавляем результат инструмента в историю
                 history.add(
@@ -97,7 +93,7 @@ class Agent(
             }
 
             // Вызываем LLM ещё раз для получения финального ответа
-            val finalResponse = callLLM(history)
+            val finalResponse = callLLM(history, conversationId)
             val finalMessage = finalResponse.choices.firstOrNull()?.message
                 ?: throw RuntimeException("Пустой финальный ответ от LLM")
 
@@ -131,14 +127,18 @@ class Agent(
         }
     }
 
-    private suspend fun callLLM(messages: List<LLMMessage>): LLMResponse {
-        logger.debug("Вызов LLM API: ${messages.size} сообщений")
+    private suspend fun callLLM(messages: List<LLMMessage>, conversationId: String): LLMResponse {
+        val tools = ToolRegistry.getAllTools()
+
+        ServerLogger.logLLMRequest(model, messages.size, tools.size, conversationId)
 
         val request = LLMRequest(
             model = model,
             messages = messages,
-            tools = ToolRegistry.getAllTools()
+            tools = tools
         )
+
+        val startTime = System.currentTimeMillis()
 
         val response = client.post("$baseUrl/chat/completions") {
             contentType(ContentType.Application.Json)
@@ -146,13 +146,21 @@ class Agent(
             setBody(request)
         }
 
+        val duration = System.currentTimeMillis() - startTime
+
         if (!response.status.isSuccess()) {
             val errorBody = response.body<String>()
-            logger.error("Ошибка LLM API: ${response.status} - $errorBody")
+            ServerLogger.logError("LLM API error: ${response.status} - $errorBody", null, LogCategory.LLM_RESPONSE)
             throw RuntimeException("Ошибка LLM API: ${response.status}")
         }
 
-        return response.body()
+        val llmResponse: LLMResponse = response.body()
+        val hasToolCalls = llmResponse.choices.firstOrNull()?.message?.tool_calls?.isNotEmpty() == true
+        val content = llmResponse.choices.firstOrNull()?.message?.content
+
+        ServerLogger.logLLMResponse(model, hasToolCalls, content, duration, conversationId)
+
+        return llmResponse
     }
 
     fun close() {
