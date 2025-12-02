@@ -65,8 +65,15 @@ class Agent(
         if (assistantMessage.tool_calls != null && assistantMessage.tool_calls.isNotEmpty()) {
             logger.info("Агент вызывает инструменты: ${assistantMessage.tool_calls.map { it.function.name }}")
 
-            // Добавляем ответ ассистента с tool_calls
-            history.add(assistantMessage)
+            // Добавляем ответ ассистента с tool_calls (убеждаемся что type заполнен)
+            val fixedToolCalls = assistantMessage.tool_calls.map { tc ->
+                LLMToolCall(
+                    id = tc.id,
+                    type = tc.type ?: "function",
+                    function = tc.function
+                )
+            }
+            history.add(assistantMessage.copy(tool_calls = fixedToolCalls))
 
             // Выполняем каждый инструмент
             for (toolCall in assistantMessage.tool_calls) {

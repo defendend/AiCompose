@@ -66,7 +66,7 @@ data class LLMMessage(
 @Serializable
 data class LLMToolCall(
     val id: String,
-    val type: String = "function",
+    val type: String? = null,
     val function: FunctionCall
 )
 
@@ -78,7 +78,7 @@ data class FunctionCall(
 
 @Serializable
 data class Tool(
-    val type: String = "function",
+    val type: String,
     val function: FunctionDefinition
 )
 
@@ -91,7 +91,7 @@ data class FunctionDefinition(
 
 @Serializable
 data class FunctionParameters(
-    val type: String = "object",
+    val type: String,
     val properties: Map<String, PropertyDefinition>,
     val required: List<String> = emptyList()
 )

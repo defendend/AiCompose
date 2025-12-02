@@ -32,6 +32,7 @@ object GetCurrentTimeTool : AgentTool {
             name = name,
             description = description,
             parameters = FunctionParameters(
+                type = "object",
                 properties = mapOf(
                     "timezone" to PropertyDefinition(
                         type = "string",
@@ -62,6 +63,7 @@ object CalculatorTool : AgentTool {
             name = name,
             description = description,
             parameters = FunctionParameters(
+                type = "object",
                 properties = mapOf(
                     "operation" to PropertyDefinition(
                         type = "string",
@@ -121,6 +123,7 @@ object RandomNumberTool : AgentTool {
             name = name,
             description = description,
             parameters = FunctionParameters(
+                type = "object",
                 properties = mapOf(
                     "min" to PropertyDefinition(
                         type = "integer",
