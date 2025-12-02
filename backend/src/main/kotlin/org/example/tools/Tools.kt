@@ -27,6 +27,7 @@ object GetCurrentTimeTool : AgentTool {
     override val description = "Получает текущее время и дату"
 
     override fun getDefinition(): Tool = Tool(
+        type = "function",
         function = FunctionDefinition(
             name = name,
             description = description,
@@ -56,6 +57,7 @@ object CalculatorTool : AgentTool {
     override val description = "Выполняет математические вычисления"
 
     override fun getDefinition(): Tool = Tool(
+        type = "function",
         function = FunctionDefinition(
             name = name,
             description = description,
@@ -114,6 +116,7 @@ object RandomNumberTool : AgentTool {
     override val description = "Генерирует случайное число в заданном диапазоне"
 
     override fun getDefinition(): Tool = Tool(
+        type = "function",
         function = FunctionDefinition(
             name = name,
             description = description,
