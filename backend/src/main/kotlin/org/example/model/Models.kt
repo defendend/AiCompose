@@ -4,9 +4,17 @@ import kotlinx.serialization.Serializable
 import java.util.UUID
 
 @Serializable
+enum class ResponseFormat {
+    PLAIN,      // Простой текст
+    JSON,       // Структурированный JSON
+    MARKDOWN    // Markdown форматирование
+}
+
+@Serializable
 data class ChatRequest(
     val message: String,
-    val conversationId: String? = null
+    val conversationId: String? = null,
+    val responseFormat: ResponseFormat = ResponseFormat.PLAIN
 )
 
 @Serializable

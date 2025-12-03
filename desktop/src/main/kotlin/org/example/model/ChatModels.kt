@@ -35,13 +35,35 @@ data class ToolResult(
 )
 
 @Serializable
+enum class ResponseFormat {
+    PLAIN,      // Простой текст
+    JSON,       // Структурированный JSON
+    MARKDOWN    // Markdown форматирование
+}
+
+@Serializable
 data class ChatRequest(
     val message: String,
-    val conversationId: String? = null
+    val conversationId: String? = null,
+    val responseFormat: ResponseFormat = ResponseFormat.PLAIN
 )
 
 @Serializable
 data class ChatResponse(
     val message: ChatMessage,
     val conversationId: String
+)
+
+/**
+ * Модель для парсинга структурированного JSON ответа от агента
+ */
+@Serializable
+data class StructuredResponse(
+    val topic: String = "",
+    val period: String = "",
+    val summary: String = "",
+    val main_content: String = "",
+    val interesting_facts: List<String> = emptyList(),
+    val related_topics: List<String> = emptyList(),
+    val quote: String = ""
 )

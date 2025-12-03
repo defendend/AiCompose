@@ -18,6 +18,7 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.unit.dp
 import org.example.model.ChatMessage
 import org.example.model.MessageRole
+import org.example.model.ResponseFormat
 import org.example.ui.ChatViewModel
 
 @Composable
@@ -25,6 +26,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
     val messages by viewModel.messages.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
+    val responseFormat by viewModel.responseFormat.collectAsState()
 
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -41,23 +43,48 @@ fun ChatScreen(viewModel: ChatViewModel) {
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.surfaceVariant
         ) {
-            Row(
-                modifier = Modifier.padding(8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "AI Agent Chat",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                IconButton(onClick = { viewModel.clearChat() }) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Очистить чат",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+            Column {
+                Row(
+                    modifier = Modifier.padding(8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "AI Agent Chat",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    IconButton(onClick = { viewModel.clearChat() }) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Очистить чат",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Переключатель формата ответа
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp).padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Формат:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    ResponseFormat.entries.forEach { format ->
+                        FilterChip(
+                            selected = responseFormat == format,
+                            onClick = { viewModel.setResponseFormat(format) },
+                            label = { Text(getFormatLabel(format), style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.height(28.dp)
+                        )
+                    }
                 }
             }
         }
@@ -279,5 +306,13 @@ private fun LoadingIndicator() {
                 )
             }
         }
+    }
+}
+
+private fun getFormatLabel(format: ResponseFormat): String {
+    return when (format) {
+        ResponseFormat.PLAIN -> "Текст"
+        ResponseFormat.JSON -> "JSON"
+        ResponseFormat.MARKDOWN -> "Markdown"
     }
 }

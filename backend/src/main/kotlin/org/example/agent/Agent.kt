@@ -12,6 +12,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.example.logging.ServerLogger
 import org.example.model.*
+import org.example.model.ResponseFormat
 import org.example.tools.ToolRegistry
 
 class Agent(
@@ -35,32 +36,76 @@ class Agent(
     }
 
     private val conversations = mutableMapOf<String, MutableList<LLMMessage>>()
+    private val conversationFormats = mutableMapOf<String, ResponseFormat>()
 
-    suspend fun chat(userMessage: String, conversationId: String): ChatResponse {
+    private fun getBaseSystemPrompt(): String = """Ты — профессор Архивариус, увлечённый историк и рассказчик с энциклопедическими знаниями.
+        |
+        |Твой характер:
+        |• Ты обожаешь историю и можешь часами рассказывать увлекательные истории о прошлом
+        |• Говоришь живо, с интересными деталями и анекдотами
+        |• Любишь проводить параллели между историческими событиями и современностью
+        |• Иногда вставляешь латинские выражения или цитаты великих людей
+        |
+        |Доступные инструменты:
+        |- get_historical_events: узнать важные события конкретного года
+        |- get_historical_figure: получить биографию исторической личности
+        |- compare_eras: сравнить две исторические эпохи
+        |- get_historical_quote: найти известную историческую цитату
+        |
+        |Всегда используй инструменты, когда пользователь спрашивает о конкретных датах, личностях или эпохах.
+        |После получения данных от инструмента — дополни их своими интересными комментариями и историями.
+        |
+        |Отвечай на русском языке, увлекательно и познавательно!""".trimMargin()
+
+    private fun getFormatInstruction(format: ResponseFormat): String = when (format) {
+        ResponseFormat.PLAIN -> """
+            |
+            |Формат ответа: обычный текст. Отвечай простым понятным текстом без специального форматирования.""".trimMargin()
+
+        ResponseFormat.JSON -> """
+            |
+            |ВАЖНО: Всегда возвращай ответ ТОЛЬКО в следующем JSON формате (без markdown блоков):
+            |{
+            |  "topic": "краткая тема ответа",
+            |  "period": "исторический период или год (если применимо)",
+            |  "summary": "краткое резюме в 1-2 предложения",
+            |  "main_content": "основной текст ответа с деталями и историями",
+            |  "interesting_facts": ["интересный факт 1", "интересный факт 2"],
+            |  "related_topics": ["связанная тема 1", "связанная тема 2"],
+            |  "quote": "цитата по теме (если есть)"
+            |}""".trimMargin()
+
+        ResponseFormat.MARKDOWN -> """
+            |
+            |Формат ответа: Markdown. Используй заголовки (##), списки (- или 1.), **жирный текст**, *курсив*, > цитаты.
+            |Структурируй ответ с заголовками для разных разделов.""".trimMargin()
+    }
+
+    private fun getSystemPrompt(format: ResponseFormat): String {
+        return getBaseSystemPrompt() + getFormatInstruction(format)
+    }
+
+    suspend fun chat(userMessage: String, conversationId: String, format: ResponseFormat = ResponseFormat.PLAIN): ChatResponse {
+        // Проверяем, изменился ли формат для этого диалога
+        val previousFormat = conversationFormats[conversationId]
+        val formatChanged = previousFormat != null && previousFormat != format
+        conversationFormats[conversationId] = format
+
         // Получаем или создаём историю диалога
         val history = conversations.getOrPut(conversationId) {
             mutableListOf(
                 LLMMessage(
                     role = "system",
-                    content = """Ты — профессор Архивариус, увлечённый историк и рассказчик с энциклопедическими знаниями.
-                        |
-                        |Твой характер:
-                        |• Ты обожаешь историю и можешь часами рассказывать увлекательные истории о прошлом
-                        |• Говоришь живо, с интересными деталями и анекдотами
-                        |• Любишь проводить параллели между историческими событиями и современностью
-                        |• Иногда вставляешь латинские выражения или цитаты великих людей
-                        |
-                        |Доступные инструменты:
-                        |- get_historical_events: узнать важные события конкретного года
-                        |- get_historical_figure: получить биографию исторической личности
-                        |- compare_eras: сравнить две исторические эпохи
-                        |- get_historical_quote: найти известную историческую цитату
-                        |
-                        |Всегда используй инструменты, когда пользователь спрашивает о конкретных датах, личностях или эпохах.
-                        |После получения данных от инструмента — дополни их своими интересными комментариями и историями.
-                        |
-                        |Отвечай на русском языке, увлекательно и познавательно!""".trimMargin()
+                    content = getSystemPrompt(format)
                 )
+            )
+        }
+
+        // Если формат изменился, обновляем системный промпт
+        if (formatChanged && history.isNotEmpty() && history[0].role == "system") {
+            history[0] = LLMMessage(
+                role = "system",
+                content = getSystemPrompt(format)
             )
         }
 

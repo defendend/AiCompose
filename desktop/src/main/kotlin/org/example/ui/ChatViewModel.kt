@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import org.example.logging.AppLogger
 import org.example.model.ChatMessage
 import org.example.model.MessageRole
+import org.example.model.ResponseFormat
 import org.example.network.ChatApiClient
 
 class ChatViewModel(
@@ -25,7 +26,15 @@ class ChatViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _responseFormat = MutableStateFlow(ResponseFormat.PLAIN)
+    val responseFormat: StateFlow<ResponseFormat> = _responseFormat.asStateFlow()
+
     private var conversationId: String? = null
+
+    fun setResponseFormat(format: ResponseFormat) {
+        _responseFormat.value = format
+        AppLogger.info("ChatViewModel", "Формат ответа изменён на: $format")
+    }
 
     fun sendMessage(text: String) {
         if (text.isBlank()) return
@@ -40,9 +49,9 @@ class ChatViewModel(
         _error.value = null
 
         scope.launch {
-            AppLogger.info("ChatViewModel", "Отправка сообщения пользователя: $text")
+            AppLogger.info("ChatViewModel", "Отправка сообщения пользователя: $text (формат: ${_responseFormat.value})")
 
-            apiClient.sendMessage(text, conversationId)
+            apiClient.sendMessage(text, conversationId, _responseFormat.value)
                 .onSuccess { response ->
                     conversationId = response.conversationId
                     _messages.value = _messages.value + response.message
