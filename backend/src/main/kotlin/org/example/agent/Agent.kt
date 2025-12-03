@@ -37,6 +37,7 @@ class Agent(
 
     private val conversations = mutableMapOf<String, MutableList<LLMMessage>>()
     private val conversationFormats = mutableMapOf<String, ResponseFormat>()
+    private val conversationCollectionSettings = mutableMapOf<String, CollectionSettings>()
 
     private fun getBaseSystemPrompt(): String = """Ты — профессор Архивариус, увлечённый историк и рассказчик с энциклопедическими знаниями.
         |
@@ -81,31 +82,187 @@ class Agent(
             |Структурируй ответ с заголовками для разных разделов.""".trimMargin()
     }
 
-    private fun getSystemPrompt(format: ResponseFormat): String {
-        return getBaseSystemPrompt() + getFormatInstruction(format)
+    /**
+     * Генерирует инструкции для режима сбора данных
+     */
+    private fun getCollectionModeInstruction(settings: CollectionSettings?): String {
+        if (settings == null || !settings.enabled || settings.mode == CollectionMode.NONE) {
+            return ""
+        }
+
+        val baseInstruction = """
+            |
+            |=== РЕЖИМ СБОРА ДАННЫХ ===
+            |Ты работаешь в режиме сбора информации для документа: "${settings.resultTitle}".
+            |
+            |ТВОЯ ЗАДАЧА:
+            |1. Задавай уточняющие вопросы пользователю, чтобы собрать всю необходимую информацию
+            |2. Отслеживай, какие данные уже собраны, а какие ещё нужны
+            |3. После каждого ответа пользователя анализируй, достаточно ли информации
+            |4. Когда ВСЯ необходимая информация собрана — АВТОМАТИЧЕСКИ сформируй финальный документ
+            |
+            |ФОРМАТ РАБОТЫ:
+            |• В начале диалога представься и объясни, что будешь собирать информацию
+            |• После каждого ответа пользователя кратко подтверждай, что понял, и задавай следующий вопрос
+            |• В конце каждого сообщения показывай прогресс: "Собрано: X из Y пунктов"
+            |• Когда всё собрано, напиши "=== ГОТОВЫЙ ДОКУМЕНТ ===" и выведи структурированный результат
+            |""".trimMargin()
+
+        val modeSpecificInstruction = when (settings.mode) {
+            CollectionMode.TECHNICAL_SPEC -> """
+                |
+                |СОБЕРИ СЛЕДУЮЩУЮ ИНФОРМАЦИЮ ДЛЯ ТЗ:
+                |1. Цель проекта — какую проблему решает?
+                |2. Целевая аудитория — кто будет использовать?
+                |3. Функциональные требования — что система должна делать?
+                |4. Нефункциональные требования — производительность, безопасность, масштабируемость
+                |5. Технологический стек — какие технологии предпочтительны?
+                |6. Ограничения — бюджет, сроки, технические ограничения
+                |7. Критерии приёмки — как определить, что проект готов?
+                |
+                |ФОРМАТ ИТОГОВОГО ТЗ:
+                |# Техническое задание: [Название проекта]
+                |
+                |## 1. Введение
+                |### 1.1 Цель проекта
+                |### 1.2 Целевая аудитория
+                |
+                |## 2. Функциональные требования
+                |[Список требований]
+                |
+                |## 3. Нефункциональные требования
+                |[Производительность, безопасность, etc.]
+                |
+                |## 4. Технологии
+                |[Стек технологий]
+                |
+                |## 5. Ограничения
+                |[Сроки, бюджет, зависимости]
+                |
+                |## 6. Критерии приёмки
+                |[Checklist]
+                |""".trimMargin()
+
+            CollectionMode.DESIGN_BRIEF -> """
+                |
+                |СОБЕРИ СЛЕДУЮЩУЮ ИНФОРМАЦИЮ ДЛЯ ДИЗАЙН-БРИФА:
+                |1. Название проекта/бренда
+                |2. Описание продукта или услуги
+                |3. Целевая аудитория — демография, интересы
+                |4. Ключевое сообщение — что должен чувствовать пользователь?
+                |5. Стилевые предпочтения — современный/классический, минимализм/максимализм
+                |6. Цветовые предпочтения — есть ли брендбук?
+                |7. Референсы — примеры дизайна, которые нравятся
+                |8. Ограничения — что точно НЕ должно быть?
+                |
+                |ФОРМАТ ИТОГОВОГО БРИФА:
+                |# Дизайн-бриф: [Название]
+                |
+                |## О проекте
+                |[Описание]
+                |
+                |## Целевая аудитория
+                |[Портрет пользователя]
+                |
+                |## Стиль и настроение
+                |[Описание желаемого стиля]
+                |
+                |## Цветовая палитра
+                |[Предпочтения по цветам]
+                |
+                |## Референсы
+                |[Ссылки или описания]
+                |
+                |## Ограничения
+                |[Что избегать]
+                |""".trimMargin()
+
+            CollectionMode.PROJECT_SUMMARY -> """
+                |
+                |СОБЕРИ СЛЕДУЮЩУЮ ИНФОРМАЦИЮ ДЛЯ РЕЗЮМЕ ПРОЕКТА:
+                |1. Название проекта
+                |2. Проблема — какую боль решает?
+                |3. Решение — как именно решает?
+                |4. Уникальность — чем отличается от конкурентов?
+                |5. Целевой рынок — кто платит?
+                |6. Бизнес-модель — как зарабатывает?
+                |7. Текущий статус — что уже сделано?
+                |8. Планы — что дальше?
+                |
+                |ФОРМАТ ИТОГОВОГО РЕЗЮМЕ:
+                |# [Название проекта]
+                |
+                |## Проблема
+                |[Описание проблемы]
+                |
+                |## Решение
+                |[Как решаем]
+                |
+                |## Преимущества
+                |• [Преимущество 1]
+                |• [Преимущество 2]
+                |
+                |## Рынок
+                |[Целевая аудитория и размер рынка]
+                |
+                |## Статус
+                |[Текущее состояние]
+                |
+                |## Дорожная карта
+                |[Планы развития]
+                |""".trimMargin()
+
+            CollectionMode.CUSTOM -> """
+                |
+                |ПОЛЬЗОВАТЕЛЬСКИЕ ИНСТРУКЦИИ:
+                |${settings.customPrompt}
+                |
+                |Собери всю необходимую информацию согласно инструкциям выше,
+                |и сформируй структурированный документ "${settings.resultTitle}".
+                |""".trimMargin()
+
+            CollectionMode.NONE -> ""
+        }
+
+        return baseInstruction + modeSpecificInstruction
     }
 
-    suspend fun chat(userMessage: String, conversationId: String, format: ResponseFormat = ResponseFormat.PLAIN): ChatResponse {
-        // Проверяем, изменился ли формат для этого диалога
+    private fun getSystemPrompt(format: ResponseFormat, collectionSettings: CollectionSettings? = null): String {
+        return getBaseSystemPrompt() + getFormatInstruction(format) + getCollectionModeInstruction(collectionSettings)
+    }
+
+    suspend fun chat(
+        userMessage: String,
+        conversationId: String,
+        format: ResponseFormat = ResponseFormat.PLAIN,
+        collectionSettings: CollectionSettings? = null
+    ): ChatResponse {
+        // Проверяем, изменился ли формат или настройки сбора для этого диалога
         val previousFormat = conversationFormats[conversationId]
+        val previousCollectionSettings = conversationCollectionSettings[conversationId]
         val formatChanged = previousFormat != null && previousFormat != format
+        val collectionSettingsChanged = previousCollectionSettings != collectionSettings
+
         conversationFormats[conversationId] = format
+        if (collectionSettings != null) {
+            conversationCollectionSettings[conversationId] = collectionSettings
+        }
 
         // Получаем или создаём историю диалога
         val history = conversations.getOrPut(conversationId) {
             mutableListOf(
                 LLMMessage(
                     role = "system",
-                    content = getSystemPrompt(format)
+                    content = getSystemPrompt(format, collectionSettings)
                 )
             )
         }
 
-        // Если формат изменился, обновляем системный промпт
-        if (formatChanged && history.isNotEmpty() && history[0].role == "system") {
+        // Если формат или настройки изменились, обновляем системный промпт
+        if ((formatChanged || collectionSettingsChanged) && history.isNotEmpty() && history[0].role == "system") {
             history[0] = LLMMessage(
                 role = "system",
-                content = getSystemPrompt(format)
+                content = getSystemPrompt(format, collectionSettings)
             )
         }
 

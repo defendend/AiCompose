@@ -12,6 +12,7 @@ import kotlinx.serialization.json.Json
 import org.example.logging.AppLogger
 import org.example.model.ChatRequest
 import org.example.model.ChatResponse
+import org.example.model.CollectionSettings
 import org.example.model.ResponseFormat
 import org.example.model.ServerLogsResponse
 
@@ -34,19 +35,21 @@ class ChatApiClient(
     }
 
     suspend fun sendMessage(
-        message: String,
+        text: String,
         conversationId: String? = null,
-        responseFormat: ResponseFormat = ResponseFormat.PLAIN
+        responseFormat: ResponseFormat = ResponseFormat.PLAIN,
+        collectionSettings: CollectionSettings? = null
     ): Result<ChatResponse> {
         return try {
-            AppLogger.info("ChatApiClient", "Отправка запроса: $message (формат: $responseFormat)")
+            AppLogger.info("ChatApiClient", "Отправка запроса: $text (формат: $responseFormat, режим сбора: ${collectionSettings?.mode})")
 
             val response = client.post("$baseUrl/api/chat") {
                 contentType(ContentType.Application.Json)
                 setBody(ChatRequest(
-                    message = message,
+                    message = text,
                     conversationId = conversationId,
-                    responseFormat = responseFormat
+                    responseFormat = responseFormat,
+                    collectionSettings = collectionSettings
                 ))
             }
 

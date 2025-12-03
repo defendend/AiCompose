@@ -14,7 +14,8 @@ enum class ResponseFormat {
 data class ChatRequest(
     val message: String,
     val conversationId: String? = null,
-    val responseFormat: ResponseFormat = ResponseFormat.PLAIN
+    val responseFormat: ResponseFormat = ResponseFormat.PLAIN,
+    val collectionSettings: CollectionSettings? = null
 )
 
 @Serializable
