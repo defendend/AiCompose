@@ -15,11 +15,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.serialization.json.Json
 import org.example.model.ChatMessage
 import org.example.model.MessageRole
 import org.example.model.ResponseFormat
+import org.example.model.StructuredResponse
 import org.example.ui.ChatViewModel
+
+private val jsonFormatter = Json {
+    prettyPrint = true
+    ignoreUnknownKeys = true
+}
 
 @Composable
 fun ChatScreen(viewModel: ChatViewModel) {
@@ -224,11 +233,20 @@ private fun MessageBubble(message: ChatMessage) {
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            Text(
-                text = message.content,
-                style = MaterialTheme.typography.bodyMedium,
-                color = textColor
-            )
+            // Пробуем распарсить как JSON
+            val structuredContent = remember(message.content) {
+                tryParseStructuredResponse(message.content)
+            }
+
+            if (structuredContent != null) {
+                StructuredResponseView(structuredContent, message.content, textColor)
+            } else {
+                Text(
+                    text = message.content,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = textColor
+                )
+            }
 
             // Отображение вызова инструмента
             message.toolCall?.let { toolCall ->
@@ -314,5 +332,184 @@ private fun getFormatLabel(format: ResponseFormat): String {
         ResponseFormat.PLAIN -> "Текст"
         ResponseFormat.JSON -> "JSON"
         ResponseFormat.MARKDOWN -> "Markdown"
+    }
+}
+
+private fun tryParseStructuredResponse(content: String): StructuredResponse? {
+    return try {
+        // Пробуем найти JSON в тексте (может быть обёрнут в markdown блок)
+        val jsonContent = content
+            .replace(Regex("^```json\\s*", RegexOption.MULTILINE), "")
+            .replace(Regex("^```\\s*$", RegexOption.MULTILINE), "")
+            .trim()
+
+        if (jsonContent.startsWith("{") && jsonContent.endsWith("}")) {
+            jsonFormatter.decodeFromString<StructuredResponse>(jsonContent)
+        } else {
+            null
+        }
+    } catch (e: Exception) {
+        null
+    }
+}
+
+@Composable
+private fun StructuredResponseView(
+    response: StructuredResponse,
+    rawJson: String,
+    textColor: androidx.compose.ui.graphics.Color
+) {
+    var showRawJson by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Тема и период
+        if (response.topic.isNotBlank()) {
+            Text(
+                text = response.topic,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = textColor
+            )
+        }
+
+        if (response.period.isNotBlank()) {
+            Text(
+                text = response.period,
+                style = MaterialTheme.typography.labelMedium,
+                color = textColor.copy(alpha = 0.7f)
+            )
+        }
+
+        // Краткое резюме
+        if (response.summary.isNotBlank()) {
+            Surface(
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text(
+                    text = response.summary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = textColor,
+                    modifier = Modifier.padding(8.dp)
+                )
+            }
+        }
+
+        // Основной контент
+        if (response.main_content.isNotBlank()) {
+            Text(
+                text = response.main_content,
+                style = MaterialTheme.typography.bodyMedium,
+                color = textColor
+            )
+        }
+
+        // Интересные факты
+        if (response.interesting_facts.isNotEmpty()) {
+            Text(
+                text = "Интересные факты:",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = textColor
+            )
+            response.interesting_facts.forEach { fact ->
+                Row(modifier = Modifier.padding(start = 8.dp)) {
+                    Text(
+                        text = "• ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = fact,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = textColor
+                    )
+                }
+            }
+        }
+
+        // Связанные темы
+        if (response.related_topics.isNotEmpty()) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                response.related_topics.forEach { topic ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            text = topic,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Цитата
+        if (response.quote.isNotBlank()) {
+            Surface(
+                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Row(modifier = Modifier.padding(8.dp)) {
+                    Text(
+                        text = "💬 ",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        text = "\"${response.quote}\"",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = textColor
+                    )
+                }
+            }
+        }
+
+        // Кнопка показать/скрыть raw JSON
+        TextButton(
+            onClick = { showRawJson = !showRawJson },
+            modifier = Modifier.padding(top = 4.dp)
+        ) {
+            Text(
+                text = if (showRawJson) "Скрыть JSON" else "Показать JSON",
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+
+        // Raw JSON
+        if (showRawJson) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                val formattedJson = remember(rawJson) {
+                    try {
+                        val jsonContent = rawJson
+                            .replace(Regex("^```json\\s*", RegexOption.MULTILINE), "")
+                            .replace(Regex("^```\\s*$", RegexOption.MULTILINE), "")
+                            .trim()
+                        val element = jsonFormatter.parseToJsonElement(jsonContent)
+                        jsonFormatter.encodeToString(kotlinx.serialization.json.JsonElement.serializer(), element)
+                    } catch (e: Exception) {
+                        rawJson
+                    }
+                }
+
+                Text(
+                    text = formattedJson,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = textColor.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(8.dp)
+                )
+            }
+        }
     }
 }

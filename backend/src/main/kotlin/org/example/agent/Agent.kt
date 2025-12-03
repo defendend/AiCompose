@@ -112,27 +112,35 @@ class Agent(
         // Добавляем сообщение пользователя
         history.add(LLMMessage(role = "user", content = userMessage))
 
-        // Вызываем LLM
-        val response = callLLM(history, conversationId)
-
-        // Обрабатываем ответ
-        val assistantMessage = response.choices.firstOrNull()?.message
+        // Цикл обработки tool calls (максимум 5 итераций для защиты от бесконечного цикла)
+        var currentResponse = callLLM(history, conversationId)
+        var currentMessage = currentResponse.choices.firstOrNull()?.message
             ?: throw RuntimeException("Пустой ответ от LLM")
 
-        // Проверяем, есть ли вызов инструмента
-        if (assistantMessage.tool_calls != null && assistantMessage.tool_calls.isNotEmpty()) {
+        var firstToolCall: LLMToolCall? = null
+        var iterations = 0
+        val maxIterations = 5
+
+        while (currentMessage.tool_calls != null && currentMessage.tool_calls.isNotEmpty() && iterations < maxIterations) {
+            iterations++
+
+            // Сохраняем первый tool call для отображения в UI
+            if (firstToolCall == null) {
+                firstToolCall = currentMessage.tool_calls.first()
+            }
+
             // Добавляем ответ ассистента с tool_calls (убеждаемся что type заполнен)
-            val fixedToolCalls = assistantMessage.tool_calls.map { tc ->
+            val fixedToolCalls = currentMessage.tool_calls.map { tc ->
                 LLMToolCall(
                     id = tc.id,
                     type = tc.type ?: "function",
                     function = tc.function
                 )
             }
-            history.add(assistantMessage.copy(tool_calls = fixedToolCalls))
+            history.add(currentMessage.copy(tool_calls = fixedToolCalls))
 
             // Выполняем каждый инструмент
-            for (toolCall in assistantMessage.tool_calls) {
+            for (toolCall in currentMessage.tool_calls) {
                 val toolName = toolCall.function.name
                 val toolArgs = toolCall.function.arguments
 
@@ -154,39 +162,30 @@ class Agent(
                 )
             }
 
-            // Вызываем LLM ещё раз для получения финального ответа
-            val finalResponse = callLLM(history, conversationId)
-            val finalMessage = finalResponse.choices.firstOrNull()?.message
-                ?: throw RuntimeException("Пустой финальный ответ от LLM")
-
-            history.add(finalMessage)
-
-            // Возвращаем ответ с информацией о вызове инструмента
-            val firstToolCall = assistantMessage.tool_calls.first()
-            return ChatResponse(
-                message = ChatMessage(
-                    role = MessageRole.ASSISTANT,
-                    content = finalMessage.content ?: "",
-                    toolCall = ToolCall(
-                        id = firstToolCall.id,
-                        name = firstToolCall.function.name,
-                        arguments = firstToolCall.function.arguments
-                    )
-                ),
-                conversationId = conversationId
-            )
-        } else {
-            // Простой ответ без инструментов
-            history.add(assistantMessage)
-
-            return ChatResponse(
-                message = ChatMessage(
-                    role = MessageRole.ASSISTANT,
-                    content = assistantMessage.content ?: ""
-                ),
-                conversationId = conversationId
-            )
+            // Вызываем LLM ещё раз
+            currentResponse = callLLM(history, conversationId)
+            currentMessage = currentResponse.choices.firstOrNull()?.message
+                ?: throw RuntimeException("Пустой ответ от LLM")
         }
+
+        // Добавляем финальное сообщение в историю
+        history.add(currentMessage)
+
+        // Возвращаем ответ
+        return ChatResponse(
+            message = ChatMessage(
+                role = MessageRole.ASSISTANT,
+                content = currentMessage.content ?: "",
+                toolCall = firstToolCall?.let { tc ->
+                    ToolCall(
+                        id = tc.id,
+                        name = tc.function.name,
+                        arguments = tc.function.arguments
+                    )
+                }
+            ),
+            conversationId = conversationId
+        )
     }
 
     private val jsonPretty = Json {
