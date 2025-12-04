@@ -150,13 +150,19 @@ private fun ModeCard(
     val borderColor = if (isSelected) {
         MaterialTheme.colorScheme.primary
     } else {
-        MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+        MaterialTheme.colorScheme.outline
     }
 
     val backgroundColor = if (isSelected) {
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+        MaterialTheme.colorScheme.primaryContainer
     } else {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        MaterialTheme.colorScheme.surface
+    }
+
+    val contentColor = if (isSelected) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurface
     }
 
     Surface(
@@ -186,7 +192,7 @@ private fun ModeCard(
                         text = template.title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = contentColor
                     )
 
                     if (isSelected) {
@@ -204,7 +210,7 @@ private fun ModeCard(
                 Text(
                     text = template.description,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    color = contentColor.copy(alpha = 0.8f)
                 )
 
                 if (template.requiredFields.isNotEmpty()) {
@@ -214,7 +220,7 @@ private fun ModeCard(
                         text = "Что соберу:",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        color = contentColor.copy(alpha = 0.9f)
                     )
 
                     Spacer(modifier = Modifier.height(4.dp))
@@ -225,13 +231,13 @@ private fun ModeCard(
                     ) {
                         template.requiredFields.forEach { field ->
                             Surface(
-                                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f),
+                                color = MaterialTheme.colorScheme.secondaryContainer,
                                 shape = RoundedCornerShape(8.dp)
                             ) {
                                 Text(
                                     text = field,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.secondary,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
                             }
