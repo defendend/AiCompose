@@ -17,7 +17,15 @@ enum class CollectionMode {
     /** Сбор информации для резюме проекта */
     PROJECT_SUMMARY,
     /** Пользовательский режим */
-    CUSTOM
+    CUSTOM,
+
+    // === Режимы решения задач ===
+    /** Прямой ответ — модель отвечает сразу без рассуждений */
+    SOLVE_DIRECT,
+    /** Пошаговое решение — модель решает задачу шаг за шагом */
+    SOLVE_STEP_BY_STEP,
+    /** Группа экспертов — несколько экспертов дают свои решения */
+    SOLVE_EXPERT_PANEL
 }
 
 /**
@@ -57,6 +65,21 @@ data class CollectionSettings(
                 CollectionMode.CUSTOM -> CollectionSettings(
                     mode = mode,
                     resultTitle = "Результат",
+                    enabled = true
+                )
+                CollectionMode.SOLVE_DIRECT -> CollectionSettings(
+                    mode = mode,
+                    resultTitle = "Прямой ответ",
+                    enabled = true
+                )
+                CollectionMode.SOLVE_STEP_BY_STEP -> CollectionSettings(
+                    mode = mode,
+                    resultTitle = "Пошаговое решение",
+                    enabled = true
+                )
+                CollectionMode.SOLVE_EXPERT_PANEL -> CollectionSettings(
+                    mode = mode,
+                    resultTitle = "Мнения экспертов",
                     enabled = true
                 )
             }
@@ -137,6 +160,28 @@ object CollectionModeTemplates {
             description = "Настройте свой режим сбора данных",
             icon = "⚙️",
             requiredFields = emptyList()
+        ),
+        // === Режимы решения задач ===
+        CollectionModeTemplate(
+            mode = CollectionMode.SOLVE_DIRECT,
+            title = "Прямой ответ",
+            description = "Модель даёт ответ напрямую, без объяснений и рассуждений",
+            icon = "⚡",
+            requiredFields = listOf("Быстрый ответ", "Без рассуждений")
+        ),
+        CollectionModeTemplate(
+            mode = CollectionMode.SOLVE_STEP_BY_STEP,
+            title = "Пошаговое решение",
+            description = "Модель решает задачу шаг за шагом, объясняя каждый этап",
+            icon = "🔢",
+            requiredFields = listOf("Анализ задачи", "Шаги решения", "Промежуточные выводы", "Итоговый ответ")
+        ),
+        CollectionModeTemplate(
+            mode = CollectionMode.SOLVE_EXPERT_PANEL,
+            title = "Группа экспертов",
+            description = "Три эксперта анализируют задачу и дают свои решения, затем сравнение",
+            icon = "👥",
+            requiredFields = listOf("Мнение логика", "Мнение практика", "Мнение критика", "Сравнение и вывод")
         )
     )
 

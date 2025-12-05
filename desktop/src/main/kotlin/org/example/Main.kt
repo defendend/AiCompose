@@ -87,6 +87,7 @@ private fun MainContent(
     onOpenSettings: () -> Unit
 ) {
     val collectionSettings by chatViewModel.collectionSettings.collectAsState()
+    var showMenu by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Top App Bar
@@ -101,16 +102,57 @@ private fun MainContent(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onToggleLogs) {
-                    Icon(
-                        Icons.Default.Menu,
-                        contentDescription = "Локальные логи",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
+                // Меню-кнопка с выпадающим списком
+                Box {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(
+                            Icons.Default.Menu,
+                            contentDescription = "Меню",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Настройки") },
+                            onClick = {
+                                showMenu = false
+                                onOpenSettings()
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Settings,
+                                    contentDescription = null
+                                )
+                            }
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Локальные логи") },
+                            onClick = {
+                                showMenu = false
+                                onToggleLogs()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Серверные логи") },
+                            onClick = {
+                                showMenu = false
+                                onToggleServerLogs()
+                            }
+                        )
+                    }
                 }
-                TextButton(onClick = onToggleServerLogs) {
-                    Text("Серверные логи")
-                }
+
+                // Название приложения
+                Text(
+                    text = "AI Agent Chat",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
 
                 Spacer(modifier = Modifier.weight(1f))
 
@@ -137,14 +179,6 @@ private fun MainContent(
                             )
                         }
                     }
-                }
-
-                IconButton(onClick = onOpenSettings) {
-                    Icon(
-                        Icons.Default.Settings,
-                        contentDescription = "Настройки",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
                 }
             }
         }
