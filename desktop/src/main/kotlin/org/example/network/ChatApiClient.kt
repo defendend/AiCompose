@@ -28,9 +28,9 @@ class ChatApiClient(
             })
         }
         install(HttpTimeout) {
-            requestTimeoutMillis = 60000
+            requestTimeoutMillis = 180000  // 3 минуты для сложных запросов (группа экспертов)
             connectTimeoutMillis = 10000
-            socketTimeoutMillis = 60000
+            socketTimeoutMillis = 180000
         }
     }
 

@@ -20,6 +20,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.serialization.json.Json
 import org.example.model.ChatMessage
+import org.example.model.CollectionMode
+import org.example.model.CollectionModeTemplates
+import org.example.model.CollectionSettings
 import org.example.model.MessageRole
 import org.example.model.ResponseFormat
 import org.example.model.StructuredResponse
@@ -30,12 +33,21 @@ private val jsonFormatter = Json {
     ignoreUnknownKeys = true
 }
 
+// Режимы решения задач для быстрого переключения
+private val solveModes = listOf(
+    CollectionMode.NONE,
+    CollectionMode.SOLVE_DIRECT,
+    CollectionMode.SOLVE_STEP_BY_STEP,
+    CollectionMode.SOLVE_EXPERT_PANEL
+)
+
 @Composable
 fun ChatScreen(viewModel: ChatViewModel) {
     val messages by viewModel.messages.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val responseFormat by viewModel.responseFormat.collectAsState()
+    val collectionSettings by viewModel.collectionSettings.collectAsState()
 
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -77,7 +89,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
 
                 // Переключатель формата ответа
                 Row(
-                    modifier = Modifier.padding(horizontal = 8.dp).padding(bottom = 8.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp).padding(bottom = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -91,6 +103,41 @@ fun ChatScreen(viewModel: ChatViewModel) {
                             selected = responseFormat == format,
                             onClick = { viewModel.setResponseFormat(format) },
                             label = { Text(getFormatLabel(format), style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.height(28.dp)
+                        )
+                    }
+                }
+
+                // Переключатель режима решения задач
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp).padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Режим:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    solveModes.forEach { mode ->
+                        val template = CollectionModeTemplates.getTemplate(mode)
+                        val isSelected = collectionSettings.mode == mode ||
+                                (mode == CollectionMode.NONE && !collectionSettings.enabled)
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                if (mode == CollectionMode.NONE) {
+                                    viewModel.setCollectionSettings(CollectionSettings.DISABLED)
+                                } else {
+                                    viewModel.setCollectionSettings(CollectionSettings.forMode(mode))
+                                }
+                            },
+                            label = {
+                                Text(
+                                    "${template.icon} ${getSolveModeLabel(mode)}",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            },
                             modifier = Modifier.height(28.dp)
                         )
                     }
@@ -332,6 +379,16 @@ private fun getFormatLabel(format: ResponseFormat): String {
         ResponseFormat.PLAIN -> "Текст"
         ResponseFormat.JSON -> "JSON"
         ResponseFormat.MARKDOWN -> "Markdown"
+    }
+}
+
+private fun getSolveModeLabel(mode: CollectionMode): String {
+    return when (mode) {
+        CollectionMode.NONE -> "Обычный"
+        CollectionMode.SOLVE_DIRECT -> "Прямой"
+        CollectionMode.SOLVE_STEP_BY_STEP -> "Пошаговый"
+        CollectionMode.SOLVE_EXPERT_PANEL -> "Эксперты"
+        else -> "Другой"
     }
 }
 
