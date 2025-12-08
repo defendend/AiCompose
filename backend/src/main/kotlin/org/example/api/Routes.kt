@@ -4,18 +4,30 @@ import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.flow.collect
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.example.agent.Agent
+import org.example.data.ConversationRepository
+import org.example.data.LLMClient
+import org.example.data.RedisConversationRepository
 import org.example.logging.ServerLogger
 import org.example.model.LogCategory
 import org.example.model.LogLevel
 import org.example.shared.model.ChatRequest
+import org.example.shared.model.ChatStreamRequest
+import org.example.shared.model.HealthCheckResponse
+import org.example.shared.model.ServiceHealth
 import java.util.UUID
 
 private val json = Json { prettyPrint = true }
+private val jsonCompact = Json { prettyPrint = false }
 
-fun Route.chatRoutes(agent: Agent) {
+fun Route.chatRoutes(
+    agent: Agent,
+    llmClient: LLMClient? = null,
+    conversationRepository: ConversationRepository? = null
+) {
     route("/api") {
         post("/chat") {
             val startTime = System.currentTimeMillis()
@@ -69,8 +81,120 @@ fun Route.chatRoutes(agent: Agent) {
             }
         }
 
+        // Streaming endpoint
+        post("/chat/stream") {
+            val startTime = System.currentTimeMillis()
+
+            try {
+                val bodyText = call.receiveText()
+                val request = Json.decodeFromString<ChatStreamRequest>(bodyText)
+                val conversationId = request.conversationId ?: UUID.randomUUID().toString()
+
+                ServerLogger.logRequest(
+                    method = "POST",
+                    path = "/api/chat/stream",
+                    body = bodyText,
+                    conversationId = conversationId
+                )
+
+                call.response.header(HttpHeaders.ContentType, ContentType.Text.EventStream.toString())
+                call.response.header(HttpHeaders.CacheControl, "no-cache")
+                call.response.header(HttpHeaders.Connection, "keep-alive")
+
+                call.respondTextWriter(contentType = ContentType.Text.EventStream) {
+                    agent.chatStream(
+                        userMessage = request.message,
+                        conversationId = conversationId,
+                        format = request.responseFormat,
+                        collectionSettings = request.collectionSettings,
+                        temperature = request.temperature
+                    ).collect { event ->
+                        val eventJson = jsonCompact.encodeToString(event)
+                        write("data: $eventJson\n\n")
+                        flush()
+                    }
+                }
+
+                val duration = System.currentTimeMillis() - startTime
+                ServerLogger.log(
+                    level = LogLevel.INFO,
+                    message = "Stream completed in ${duration}ms",
+                    category = LogCategory.RESPONSE,
+                    conversationId = conversationId
+                )
+
+            } catch (e: Exception) {
+                ServerLogger.logError(
+                    message = "Ошибка streaming: ${e.message}",
+                    error = e,
+                    category = LogCategory.REQUEST
+                )
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Ошибка streaming")))
+            }
+        }
+
+        // Простой health check (обратная совместимость)
         get("/health") {
             call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
+        }
+
+        // Расширенный health check с проверкой сервисов
+        get("/health/detailed") {
+            val services = mutableMapOf<String, ServiceHealth>()
+            var overallHealthy = true
+
+            // Проверка LLM API
+            if (llmClient != null) {
+                val startTime = System.currentTimeMillis()
+                val llmHealthy = try {
+                    llmClient.healthCheck()
+                } catch (e: Exception) {
+                    false
+                }
+                val latency = System.currentTimeMillis() - startTime
+
+                services["llm"] = ServiceHealth(
+                    status = if (llmHealthy) "healthy" else "unhealthy",
+                    message = if (llmHealthy) "DeepSeek API доступен" else "DeepSeek API недоступен",
+                    latencyMs = latency
+                )
+                if (!llmHealthy) overallHealthy = false
+            }
+
+            // Проверка Redis (если используется)
+            if (conversationRepository is RedisConversationRepository) {
+                val startTime = System.currentTimeMillis()
+                val redisHealthy = try {
+                    // Проверяем Redis через простую операцию
+                    conversationRepository.hasConversation("health-check-ping")
+                    true
+                } catch (e: Exception) {
+                    false
+                }
+                val latency = System.currentTimeMillis() - startTime
+
+                services["redis"] = ServiceHealth(
+                    status = if (redisHealthy) "healthy" else "unhealthy",
+                    message = if (redisHealthy) "Redis доступен" else "Redis недоступен",
+                    latencyMs = latency
+                )
+                if (!redisHealthy) overallHealthy = false
+            } else {
+                services["storage"] = ServiceHealth(
+                    status = "healthy",
+                    message = "In-Memory storage",
+                    latencyMs = 0
+                )
+            }
+
+            val response = HealthCheckResponse(
+                status = if (overallHealthy) "healthy" else "degraded",
+                services = services,
+                timestamp = System.currentTimeMillis()
+            )
+
+            val statusCode = if (overallHealthy) HttpStatusCode.OK else HttpStatusCode.ServiceUnavailable
+            call.respond(statusCode, response)
         }
 
         get("/logs") {

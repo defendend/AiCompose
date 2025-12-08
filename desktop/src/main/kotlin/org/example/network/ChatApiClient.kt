@@ -6,26 +6,35 @@ import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import io.ktor.utils.io.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
 import org.example.logging.AppLogger
 import org.example.model.ServerLogsResponse
 import org.example.shared.model.ChatRequest
 import org.example.shared.model.ChatResponse
+import org.example.shared.model.ChatStreamRequest
 import org.example.shared.model.CollectionSettings
+import org.example.shared.model.HealthCheckResponse
 import org.example.shared.model.ResponseFormat
+import org.example.shared.model.StreamEvent
 
 class ChatApiClient(
     private val baseUrl: String = "http://89.169.190.22:8080"
 ) {
+    private val jsonParser = Json {
+        prettyPrint = true
+        isLenient = true
+        ignoreUnknownKeys = true
+    }
+
     private val client = HttpClient(CIO) {
         install(ContentNegotiation) {
-            json(Json {
-                prettyPrint = true
-                isLenient = true
-                ignoreUnknownKeys = true
-            })
+            json(jsonParser)
         }
         install(HttpTimeout) {
             requestTimeoutMillis = 180000  // 3 минуты для сложных запросов (группа экспертов)
@@ -83,6 +92,76 @@ class ChatApiClient(
             Result.success(Unit)
         } catch (e: Exception) {
             AppLogger.error("ChatApiClient", "Ошибка очистки логов: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Streaming версия sendMessage - возвращает Flow событий.
+     */
+    fun sendMessageStream(
+        text: String,
+        conversationId: String? = null,
+        responseFormat: ResponseFormat = ResponseFormat.PLAIN,
+        collectionSettings: CollectionSettings? = null,
+        temperature: Float? = null
+    ): Flow<StreamEvent> = flow {
+        AppLogger.info("ChatApiClient", "Отправка streaming запроса: $text")
+
+        try {
+            client.preparePost("$baseUrl/api/chat/stream") {
+                contentType(ContentType.Application.Json)
+                setBody(ChatStreamRequest(
+                    message = text,
+                    conversationId = conversationId,
+                    responseFormat = responseFormat,
+                    collectionSettings = collectionSettings,
+                    temperature = temperature
+                ))
+            }.execute { response ->
+                if (!response.status.isSuccess()) {
+                    val errorBody = response.bodyAsText()
+                    AppLogger.error("ChatApiClient", "Streaming error: ${response.status} - $errorBody")
+                    throw Exception("Ошибка сервера: ${response.status}")
+                }
+
+                val channel: ByteReadChannel = response.bodyAsChannel()
+
+                while (!channel.isClosedForRead) {
+                    val line = channel.readUTF8Line() ?: break
+
+                    if (line.startsWith("data: ")) {
+                        val data = line.removePrefix("data: ").trim()
+
+                        if (data.isNotEmpty() && data != "[DONE]") {
+                            try {
+                                val event = jsonParser.decodeFromString<StreamEvent>(data)
+                                emit(event)
+                            } catch (e: Exception) {
+                                AppLogger.error("ChatApiClient", "Failed to parse stream event: $data")
+                            }
+                        }
+                    }
+                }
+            }
+
+            AppLogger.info("ChatApiClient", "Streaming завершён")
+
+        } catch (e: Exception) {
+            AppLogger.error("ChatApiClient", "Ошибка streaming: ${e.message}")
+            throw e
+        }
+    }
+
+    /**
+     * Получить расширенный health check.
+     */
+    suspend fun getDetailedHealth(): Result<HealthCheckResponse> {
+        return try {
+            val response = client.get("$baseUrl/api/health/detailed")
+            Result.success(response.body())
+        } catch (e: Exception) {
+            AppLogger.error("ChatApiClient", "Ошибка health check: ${e.message}")
             Result.failure(e)
         }
     }

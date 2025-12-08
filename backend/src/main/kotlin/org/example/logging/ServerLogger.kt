@@ -206,6 +206,31 @@ object ServerLogger {
         }
     }
 
+    /**
+     * Универсальный метод логирования.
+     */
+    fun log(
+        level: LogLevel,
+        message: String,
+        category: LogCategory = LogCategory.SYSTEM,
+        conversationId: String? = null
+    ) {
+        val entry = ServerLogEntry(
+            level = level,
+            category = category,
+            message = message,
+            details = LogDetails(conversationId = conversationId)
+        )
+        addLog(entry)
+        val prefix = "[${category.name}]"
+        when (level) {
+            LogLevel.DEBUG -> logger.debug("$prefix $message")
+            LogLevel.INFO -> logger.info("$prefix $message")
+            LogLevel.WARNING -> logger.warn("$prefix $message")
+            LogLevel.ERROR -> logger.error("$prefix $message")
+        }
+    }
+
     private fun addLog(entry: ServerLogEntry) {
         _logs.update { currentLogs ->
             val newLogs = currentLogs + entry

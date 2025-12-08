@@ -14,6 +14,8 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
 import org.example.agent.Agent
 import org.example.api.chatRoutes
+import org.example.data.ConversationRepository
+import org.example.data.LLMClient
 import org.example.di.appModule
 import org.example.logging.ServerLogger
 import org.example.model.LogLevel
@@ -93,8 +95,10 @@ fun Application.configurePlugins() {
  */
 fun Application.configureRouting() {
     val agent by inject<Agent>()
+    val llmClient by inject<LLMClient>()
+    val conversationRepository by inject<ConversationRepository>()
 
     routing {
-        chatRoutes(agent)
+        chatRoutes(agent, llmClient, conversationRepository)
     }
 }

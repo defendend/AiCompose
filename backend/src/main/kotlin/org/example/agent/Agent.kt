@@ -1,16 +1,22 @@
 package org.example.agent
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import org.example.data.ConversationRepository
 import org.example.data.DeepSeekClient
 import org.example.data.InMemoryConversationRepository
 import org.example.data.LLMClient
+import org.example.model.DeltaToolCall
 import org.example.model.LLMMessage
 import org.example.model.LLMToolCall
+import org.example.model.FunctionCall
 import org.example.shared.model.ChatMessage
 import org.example.shared.model.ChatResponse
 import org.example.shared.model.CollectionSettings
 import org.example.shared.model.MessageRole
 import org.example.shared.model.ResponseFormat
+import org.example.shared.model.StreamEvent
+import org.example.shared.model.StreamEventType
 import org.example.shared.model.ToolCall
 import org.example.tools.core.ToolRegistry
 import java.util.UUID
@@ -148,7 +154,196 @@ class Agent(
         return currentMessage
     }
 
+    /**
+     * Streaming версия chat - возвращает Flow событий.
+     */
+    fun chatStream(
+        userMessage: String,
+        conversationId: String,
+        format: ResponseFormat = ResponseFormat.PLAIN,
+        collectionSettings: CollectionSettings? = null,
+        temperature: Float? = null
+    ): Flow<StreamEvent> = flow {
+        val messageId = UUID.randomUUID().toString()
+
+        // Emit start event
+        emit(StreamEvent(
+            type = StreamEventType.START,
+            conversationId = conversationId,
+            messageId = messageId
+        ))
+
+        try {
+            // Проверяем, изменился ли формат или настройки
+            val previousFormat = conversationRepository.getFormat(conversationId)
+            val previousSettings = conversationRepository.getCollectionSettings(conversationId)
+            val settingsChanged = previousFormat != format || previousSettings != collectionSettings
+
+            // Сохраняем текущие настройки
+            conversationRepository.setFormat(conversationId, format)
+            collectionSettings?.let { conversationRepository.setCollectionSettings(conversationId, it) }
+
+            // Строим системный промпт
+            val systemPrompt = promptBuilder.buildSystemPrompt(format, collectionSettings)
+
+            // Инициализируем или обновляем диалог
+            if (!conversationRepository.hasConversation(conversationId)) {
+                conversationRepository.initConversation(
+                    conversationId,
+                    LLMMessage(role = "system", content = systemPrompt)
+                )
+            } else if (settingsChanged) {
+                conversationRepository.updateSystemPrompt(conversationId, systemPrompt)
+            }
+
+            // Добавляем сообщение пользователя
+            conversationRepository.addMessage(conversationId, LLMMessage(role = "user", content = userMessage))
+
+            // Streaming loop с tool calls
+            val tools = ToolRegistry.getAllTools()
+            var iterations = 0
+            var continueLoop = true
+
+            while (continueLoop && iterations < maxToolIterations) {
+                val history = conversationRepository.getHistory(conversationId)
+                val contentBuffer = StringBuilder()
+                val toolCallsBuffer = mutableMapOf<Int, ToolCallBuilder>()
+                var finishReason: String? = null
+
+                // Собираем streaming ответ
+                llmClient.chatStream(history, tools, temperature, conversationId).collect { chunk ->
+                    val choice = chunk.choices.firstOrNull() ?: return@collect
+
+                    // Content delta
+                    choice.delta?.content?.let { content ->
+                        contentBuffer.append(content)
+                        emit(StreamEvent(
+                            type = StreamEventType.CONTENT,
+                            content = content,
+                            conversationId = conversationId,
+                            messageId = messageId
+                        ))
+                    }
+
+                    // Tool calls delta
+                    choice.delta?.tool_calls?.forEach { deltaToolCall ->
+                        val builder = toolCallsBuffer.getOrPut(deltaToolCall.index) { ToolCallBuilder() }
+                        builder.update(deltaToolCall)
+                    }
+
+                    finishReason = choice.finish_reason
+                }
+
+                // Обрабатываем результат
+                if (toolCallsBuffer.isNotEmpty()) {
+                    val toolCalls = toolCallsBuffer.values.mapNotNull { it.build() }
+
+                    if (toolCalls.isNotEmpty()) {
+                        iterations++
+
+                        // Сохраняем ответ ассистента с tool calls
+                        val fixedToolCalls = toolExecutor.fixToolCalls(toolCalls)
+                        conversationRepository.addMessage(conversationId, LLMMessage(
+                            role = "assistant",
+                            content = contentBuffer.toString().takeIf { it.isNotEmpty() },
+                            tool_calls = fixedToolCalls
+                        ))
+
+                        // Выполняем инструменты и emit результаты
+                        for (toolCall in fixedToolCalls) {
+                            emit(StreamEvent(
+                                type = StreamEventType.TOOL_CALL,
+                                toolCall = ToolCall(
+                                    id = toolCall.id,
+                                    name = toolCall.function.name,
+                                    arguments = toolCall.function.arguments
+                                ),
+                                conversationId = conversationId,
+                                messageId = messageId
+                            ))
+
+                            val result = ToolRegistry.executeTool(toolCall.function.name, toolCall.function.arguments)
+
+                            emit(StreamEvent(
+                                type = StreamEventType.TOOL_RESULT,
+                                toolResult = result,
+                                conversationId = conversationId,
+                                messageId = messageId
+                            ))
+
+                            conversationRepository.addMessage(conversationId, LLMMessage(
+                                role = "tool",
+                                content = result,
+                                tool_call_id = toolCall.id
+                            ))
+                        }
+
+                        // Продолжаем цикл для получения финального ответа
+                        continueLoop = true
+                    } else {
+                        continueLoop = false
+                    }
+                } else {
+                    // Нет tool calls - сохраняем финальный ответ
+                    if (contentBuffer.isNotEmpty()) {
+                        conversationRepository.addMessage(conversationId, LLMMessage(
+                            role = "assistant",
+                            content = contentBuffer.toString()
+                        ))
+                    }
+                    continueLoop = false
+                }
+            }
+
+            // Emit done event
+            emit(StreamEvent(
+                type = StreamEventType.DONE,
+                conversationId = conversationId,
+                messageId = messageId
+            ))
+
+        } catch (e: Exception) {
+            emit(StreamEvent(
+                type = StreamEventType.ERROR,
+                error = e.message ?: "Неизвестная ошибка",
+                conversationId = conversationId,
+                messageId = messageId
+            ))
+        }
+    }
+
     fun close() {
         llmClient.close()
+    }
+}
+
+/**
+ * Вспомогательный класс для сборки tool call из delta-чанков.
+ */
+private class ToolCallBuilder {
+    private var id: String? = null
+    private var type: String? = null
+    private var functionName: String? = null
+    private val functionArguments = StringBuilder()
+
+    fun update(delta: DeltaToolCall) {
+        delta.id?.let { id = it }
+        delta.type?.let { type = it }
+        delta.function?.name?.let { functionName = it }
+        delta.function?.arguments?.let { functionArguments.append(it) }
+    }
+
+    fun build(): LLMToolCall? {
+        val builtId = id ?: return null
+        val builtName = functionName ?: return null
+
+        return LLMToolCall(
+            id = builtId,
+            type = type ?: "function",
+            function = FunctionCall(
+                name = builtName,
+                arguments = functionArguments.toString()
+            )
+        )
     }
 }

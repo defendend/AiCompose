@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import org.example.logging.AppLogger
 import org.example.network.ChatApiClient
@@ -12,6 +13,7 @@ import org.example.shared.model.ChatMessage
 import org.example.shared.model.CollectionSettings
 import org.example.shared.model.MessageRole
 import org.example.shared.model.ResponseFormat
+import org.example.shared.model.StreamEventType
 import java.util.UUID
 
 class ChatViewModel(
@@ -24,6 +26,15 @@ class ChatViewModel(
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _isStreaming = MutableStateFlow(false)
+    val isStreaming: StateFlow<Boolean> = _isStreaming.asStateFlow()
+
+    private val _streamingContent = MutableStateFlow("")
+    val streamingContent: StateFlow<String> = _streamingContent.asStateFlow()
+
+    private val _useStreaming = MutableStateFlow(true)  // По умолчанию включён streaming
+    val useStreaming: StateFlow<Boolean> = _useStreaming.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -55,7 +66,118 @@ class ChatViewModel(
         AppLogger.info("ChatViewModel", "Temperature изменён на: ${temp ?: "default"}")
     }
 
+    fun setUseStreaming(enabled: Boolean) {
+        _useStreaming.value = enabled
+        AppLogger.info("ChatViewModel", "Streaming ${if (enabled) "включён" else "выключен"}")
+    }
+
     fun sendMessage(text: String) {
+        if (_useStreaming.value) {
+            sendMessageStreaming(text)
+        } else {
+            sendMessageClassic(text)
+        }
+    }
+
+    /**
+     * Отправка сообщения с использованием streaming.
+     */
+    private fun sendMessageStreaming(text: String) {
+        if (text.isBlank()) return
+
+        val userMessage = ChatMessage(
+            id = UUID.randomUUID().toString(),
+            role = MessageRole.USER,
+            content = text,
+            timestamp = System.currentTimeMillis()
+        )
+
+        _messages.value = _messages.value + userMessage
+        _isLoading.value = true
+        _isStreaming.value = true
+        _streamingContent.value = ""
+        _error.value = null
+
+        scope.launch {
+            val currentSettings = _collectionSettings.value
+            AppLogger.info(
+                "ChatViewModel",
+                "Отправка streaming сообщения: $text (формат: ${_responseFormat.value}, режим сбора: ${currentSettings.mode})"
+            )
+
+            val shouldSendSettings = currentSettings.enabled || currentSettings.customSystemPrompt.isNotBlank()
+
+            var messageId: String? = null
+            val contentBuilder = StringBuilder()
+
+            try {
+                apiClient.sendMessageStream(
+                    text = text,
+                    conversationId = conversationId,
+                    responseFormat = _responseFormat.value,
+                    collectionSettings = if (shouldSendSettings) currentSettings else null,
+                    temperature = _temperature.value
+                ).catch { e ->
+                    AppLogger.error("ChatViewModel", "Streaming ошибка: ${e.message}")
+                    _error.value = e.message ?: "Ошибка streaming"
+                }.collect { event ->
+                    when (event.type) {
+                        StreamEventType.START -> {
+                            conversationId = event.conversationId
+                            messageId = event.messageId
+                            AppLogger.info("ChatViewModel", "Streaming начат: ${event.messageId}")
+                        }
+
+                        StreamEventType.CONTENT -> {
+                            event.content?.let { content ->
+                                contentBuilder.append(content)
+                                _streamingContent.value = contentBuilder.toString()
+                            }
+                        }
+
+                        StreamEventType.TOOL_CALL -> {
+                            event.toolCall?.let { toolCall ->
+                                AppLogger.info("ChatViewModel", "Агент вызывает инструмент: ${toolCall.name}")
+                            }
+                        }
+
+                        StreamEventType.TOOL_RESULT -> {
+                            AppLogger.info("ChatViewModel", "Результат инструмента получен")
+                        }
+
+                        StreamEventType.DONE -> {
+                            // Добавляем финальное сообщение в список
+                            val assistantMessage = ChatMessage(
+                                id = messageId ?: UUID.randomUUID().toString(),
+                                role = MessageRole.ASSISTANT,
+                                content = contentBuilder.toString(),
+                                timestamp = System.currentTimeMillis()
+                            )
+                            _messages.value = _messages.value + assistantMessage
+                            _streamingContent.value = ""
+                            AppLogger.info("ChatViewModel", "Streaming завершён")
+                        }
+
+                        StreamEventType.ERROR -> {
+                            AppLogger.error("ChatViewModel", "Ошибка от сервера: ${event.error}")
+                            _error.value = event.error ?: "Ошибка сервера"
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                AppLogger.error("ChatViewModel", "Исключение при streaming: ${e.message}")
+                _error.value = e.message ?: "Неизвестная ошибка"
+            }
+
+            _isLoading.value = false
+            _isStreaming.value = false
+        }
+    }
+
+    /**
+     * Классическая отправка сообщения (без streaming).
+     */
+    private fun sendMessageClassic(text: String) {
         if (text.isBlank()) return
 
         val userMessage = ChatMessage(

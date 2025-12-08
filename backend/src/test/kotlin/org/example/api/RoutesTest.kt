@@ -11,10 +11,21 @@ import io.ktor.server.testing.*
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.serialization.json.Json
 import org.example.agent.Agent
+import org.example.data.ConversationRepository
+import org.example.data.InMemoryConversationRepository
+import org.example.data.LLMClient
+import org.example.model.LLMMessage
+import org.example.model.LLMResponse
+import org.example.model.LLMStreamChunk
+import org.example.model.Tool
 import org.example.shared.model.ChatResponse
 import org.example.shared.model.MessageRole
+import org.example.shared.model.StreamEvent
+import org.example.shared.model.StreamEventType
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -31,9 +42,18 @@ class RoutesTest {
         every { close() } returns Unit
     }
 
-    private fun Application.configureTestApp(agent: Agent) {
+    private fun createMockLLMClient(healthy: Boolean = true): LLMClient = mockk {
+        coEvery { healthCheck() } returns healthy
+        every { close() } returns Unit
+    }
+
+    private fun Application.configureTestApp(
+        agent: Agent,
+        llmClient: LLMClient? = null,
+        conversationRepository: ConversationRepository? = null
+    ) {
         install(ContentNegotiation) { json(json) }
-        routing { chatRoutes(agent) }
+        routing { chatRoutes(agent, llmClient, conversationRepository) }
     }
 
     // === Тесты /api/health ===
@@ -190,5 +210,96 @@ class RoutesTest {
 
         assertEquals(HttpStatusCode.OK, response.status)
         assertContains(response.bodyAsText(), "cleared")
+    }
+
+    // === Тесты /api/health/detailed ===
+
+    @Test
+    fun `detailed health endpoint returns healthy when all services ok`() = testApplication {
+        val mockLLMClient = createMockLLMClient(healthy = true)
+        val repository = InMemoryConversationRepository()
+
+        application { configureTestApp(createMockAgent(), mockLLMClient, repository) }
+
+        val response = client.get("/api/health/detailed")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.bodyAsText()
+        assertContains(body, "healthy")
+        assertContains(body, "llm")
+        assertContains(body, "storage")
+    }
+
+    @Test
+    fun `detailed health endpoint returns degraded when LLM unhealthy`() = testApplication {
+        val mockLLMClient = createMockLLMClient(healthy = false)
+        val repository = InMemoryConversationRepository()
+
+        application { configureTestApp(createMockAgent(), mockLLMClient, repository) }
+
+        val response = client.get("/api/health/detailed")
+
+        assertEquals(HttpStatusCode.ServiceUnavailable, response.status)
+        val body = response.bodyAsText()
+        assertContains(body, "degraded")
+        assertContains(body, "unhealthy")
+    }
+
+    @Test
+    fun `detailed health endpoint works without llmClient`() = testApplication {
+        application { configureTestApp(createMockAgent()) }
+
+        val response = client.get("/api/health/detailed")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertContains(response.bodyAsText(), "healthy")
+    }
+
+    // === Тесты /api/chat/stream ===
+
+    @Test
+    fun `stream endpoint returns SSE content type`() = testApplication {
+        val mockAgent = createMockAgent()
+        every {
+            mockAgent.chatStream(any(), any(), any(), any(), any())
+        } returns flowOf(
+            StreamEvent(type = StreamEventType.START, conversationId = "conv-1", messageId = "msg-1"),
+            StreamEvent(type = StreamEventType.CONTENT, content = "Hello"),
+            StreamEvent(type = StreamEventType.DONE, conversationId = "conv-1", messageId = "msg-1")
+        )
+
+        application { configureTestApp(mockAgent) }
+
+        val response = client.post("/api/chat/stream") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"message": "Test"}""")
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.bodyAsText()
+        assertContains(body, "START")
+        assertContains(body, "CONTENT")
+        assertContains(body, "DONE")
+    }
+
+    @Test
+    fun `stream endpoint handles errors gracefully`() = testApplication {
+        val mockAgent = createMockAgent()
+        every {
+            mockAgent.chatStream(any(), any(), any(), any(), any())
+        } returns flowOf(
+            StreamEvent(type = StreamEventType.START, conversationId = "conv-1", messageId = "msg-1"),
+            StreamEvent(type = StreamEventType.ERROR, error = "Test error")
+        )
+
+        application { configureTestApp(mockAgent) }
+
+        val response = client.post("/api/chat/stream") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"message": "Test"}""")
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertContains(response.bodyAsText(), "ERROR")
     }
 }
