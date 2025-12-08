@@ -22,6 +22,83 @@ import org.example.model.CollectionModeTemplate
 import org.example.model.CollectionModeTemplates
 import org.example.model.CollectionSettings
 
+// Предустановленные персонажи агента
+data class AgentPersona(
+    val name: String,
+    val icon: String,
+    val description: String,
+    val systemPrompt: String
+)
+
+private val agentPersonas = listOf(
+    AgentPersona(
+        name = "Профессор Архивариус",
+        icon = "📚",
+        description = "Увлечённый историк с энциклопедическими знаниями",
+        systemPrompt = "" // Пустой = использовать дефолтный
+    ),
+    AgentPersona(
+        name = "Пират Джек",
+        icon = "🏴‍☠️",
+        description = "Морской волк, говорит на пиратском жаргоне",
+        systemPrompt = """Ты — пират Джек Воробей, легендарный морской волк и искатель сокровищ.
+
+Твой характер:
+• Говоришь на пиратском жаргоне: "Йо-хо-хо!", "Тысяча чертей!", "Разрази меня гром!"
+• Всё сравниваешь с морем, кораблями и пиратской жизнью
+• Любишь рассказывать байки о своих приключениях
+• Иногда вставляешь "Аррр!" в речь
+
+Отвечай на русском языке, но в стиле пирата!"""
+    ),
+    AgentPersona(
+        name = "Шерлок Холмс",
+        icon = "🔍",
+        description = "Гениальный детектив, логик и аналитик",
+        systemPrompt = """Ты — Шерлок Холмс, величайший детектив всех времён.
+
+Твой характер:
+• Мыслишь логически и дедуктивно
+• Замечаешь мельчайшие детали, которые другие упускают
+• Говоришь: "Элементарно!", "Факты, только факты!"
+• Объясняешь ход своих рассуждений
+• Иногда снисходителен к "очевидным" вещам
+
+Отвечай на русском языке, анализируя всё как детектив!"""
+    ),
+    AgentPersona(
+        name = "Йода",
+        icon = "🧙",
+        description = "Мудрый джедай, говорит инверсиями",
+        systemPrompt = """Ты — мастер Йода, мудрейший джедай галактики.
+
+Твой характер:
+• Говоришь инверсиями: "Сильным станешь ты" вместо "Ты станешь сильным"
+• Делишься мудростью Силы
+• Используешь метафоры о Светлой и Тёмной стороне
+• Философствуешь о терпении и внутреннем покое
+
+Примеры: "Делай или не делай. Не пробуй.", "Страх ведёт к гневу, гнев ведёт к ненависти."
+
+Отвечай на русском языке в стиле Йоды!"""
+    ),
+    AgentPersona(
+        name = "Формальный ассистент",
+        icon = "👔",
+        description = "Строгий, деловой, без лишних слов",
+        systemPrompt = """Ты — профессиональный бизнес-ассистент.
+
+Правила:
+• Отвечай кратко и по существу
+• Используй формальный деловой стиль
+• Структурируй информацию списками и пунктами
+• Избегай эмоций и неформальных выражений
+• Фокусируйся на фактах и практических рекомендациях
+
+Отвечай на русском языке в деловом стиле."""
+    )
+)
+
 @Composable
 fun SettingsScreen(
     currentSettings: CollectionSettings,
@@ -31,6 +108,8 @@ fun SettingsScreen(
     var selectedMode by remember { mutableStateOf(currentSettings.mode) }
     var customPrompt by remember { mutableStateOf(currentSettings.customPrompt) }
     var customResultTitle by remember { mutableStateOf(currentSettings.resultTitle.ifEmpty { "Результат" }) }
+    var customSystemPrompt by remember { mutableStateOf(currentSettings.customSystemPrompt) }
+    var selectedPersonaIndex by remember { mutableStateOf(0) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Top Bar
@@ -64,6 +143,65 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // === Секция персонажа агента ===
+            item {
+                Text(
+                    text = "Персонаж агента (System Prompt)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Выберите персонажа или напишите свой системный промпт. " +
+                            "Изменение персонажа влияет на стиль ответов агента.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                )
+            }
+
+            // Карточки персонажей
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    agentPersonas.forEachIndexed { index, persona ->
+                        PersonaCard(
+                            persona = persona,
+                            isSelected = selectedPersonaIndex == index && customSystemPrompt == persona.systemPrompt,
+                            onClick = {
+                                selectedPersonaIndex = index
+                                customSystemPrompt = persona.systemPrompt
+                                onSettingsChanged(
+                                    currentSettings.copy(customSystemPrompt = persona.systemPrompt)
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Редактор своего промпта
+            item {
+                SystemPromptEditor(
+                    currentPrompt = customSystemPrompt,
+                    onPromptChanged = { newPrompt ->
+                        customSystemPrompt = newPrompt
+                        selectedPersonaIndex = -1 // Снимаем выбор с персонажей
+                    },
+                    onApply = {
+                        onSettingsChanged(
+                            currentSettings.copy(customSystemPrompt = customSystemPrompt)
+                        )
+                    }
+                )
+            }
+
+            item {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            }
+
+            // === Секция режимов сбора данных ===
             item {
                 Text(
                     text = "Режим сбора данных",
@@ -75,8 +213,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Выберите режим, и модель будет собирать информацию по заданному шаблону, " +
-                            "а затем автоматически сформирует результат.",
+                    text = "Выберите режим, и модель будет собирать информацию по заданному шаблону.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
                 )
@@ -90,6 +227,7 @@ fun SettingsScreen(
                         selectedMode = template.mode
                         if (template.mode != CollectionMode.CUSTOM) {
                             val settings = CollectionSettings.forMode(template.mode)
+                                .copy(customSystemPrompt = customSystemPrompt)
                             onSettingsChanged(settings)
                         }
                     }
@@ -110,7 +248,8 @@ fun SettingsScreen(
                                     mode = CollectionMode.CUSTOM,
                                     customPrompt = customPrompt,
                                     resultTitle = customResultTitle,
-                                    enabled = true
+                                    enabled = true,
+                                    customSystemPrompt = customSystemPrompt
                                 )
                             )
                         }
@@ -128,12 +267,132 @@ fun SettingsScreen(
                             selectedMode = CollectionMode.NONE
                             customPrompt = ""
                             customResultTitle = "Результат"
-                            onSettingsChanged(CollectionSettings.DISABLED)
+                            onSettingsChanged(CollectionSettings.DISABLED.copy(customSystemPrompt = customSystemPrompt))
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Отключить режим сбора")
                     }
+                }
+            }
+
+            // Отступ внизу
+            item {
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun PersonaCard(
+    persona: AgentPersona,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+    val backgroundColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(2.dp, borderColor, RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        color = backgroundColor
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = persona.icon,
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.padding(end = 12.dp)
+            )
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = persona.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                           else MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = persona.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                           else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
+
+            if (isSelected) {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = "Выбрано",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SystemPromptEditor(
+    currentPrompt: String,
+    onPromptChanged: (String) -> Unit,
+    onApply: () -> Unit
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isExpanded = !isExpanded },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "✏️ Написать свой System Prompt",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = if (isExpanded) "▲" else "▼",
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            if (isExpanded) {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = currentPrompt,
+                    onValueChange = onPromptChanged,
+                    label = { Text("System Prompt") },
+                    placeholder = {
+                        Text("Опишите характер, стиль речи и поведение агента...")
+                    },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
+                    minLines = 6
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
+                    onClick = onApply,
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text("Применить")
                 }
             }
         }

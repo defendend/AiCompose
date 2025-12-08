@@ -39,7 +39,9 @@ data class CollectionSettings(
     /** Название результата (например, "Техническое задание") */
     val resultTitle: String = "",
     /** Включён ли режим сбора */
-    val enabled: Boolean = false
+    val enabled: Boolean = false,
+    /** Пользовательский системный промпт (персонаж агента) */
+    val customSystemPrompt: String = ""
 ) {
     companion object {
         val DISABLED = CollectionSettings()

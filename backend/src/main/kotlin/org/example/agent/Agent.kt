@@ -329,7 +329,13 @@ class Agent(
     }
 
     private fun getSystemPrompt(format: ResponseFormat, collectionSettings: CollectionSettings? = null): String {
-        return getBaseSystemPrompt() + getFormatInstruction(format) + getCollectionModeInstruction(collectionSettings)
+        // Если задан custom systemPrompt — используем его вместо базового
+        val basePrompt = if (!collectionSettings?.customSystemPrompt.isNullOrBlank()) {
+            collectionSettings!!.customSystemPrompt
+        } else {
+            getBaseSystemPrompt()
+        }
+        return basePrompt + getFormatInstruction(format) + getCollectionModeInstruction(collectionSettings)
     }
 
     suspend fun chat(
