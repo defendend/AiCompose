@@ -57,7 +57,8 @@ data class FunctionParameters(
 @Serializable
 data class PropertyDefinition(
     val type: String,
-    val description: String
+    val description: String,
+    val enum: List<String>? = null
 )
 
 @Serializable

@@ -1,6 +1,11 @@
 package org.example.tools
 
 import kotlinx.coroutines.test.runTest
+import org.example.tools.core.ToolRegistry
+import org.example.tools.historical.CompareErasTool
+import org.example.tools.historical.HistoricalEventsTool
+import org.example.tools.historical.HistoricalFigureTool
+import org.example.tools.historical.HistoricalQuoteTool
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals

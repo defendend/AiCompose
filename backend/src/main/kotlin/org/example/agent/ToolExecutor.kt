@@ -3,7 +3,7 @@ package org.example.agent
 import org.example.logging.ServerLogger
 import org.example.model.LLMMessage
 import org.example.model.LLMToolCall
-import org.example.tools.ToolRegistry
+import org.example.tools.core.ToolRegistry
 
 /**
  * Исполнитель инструментов агента.

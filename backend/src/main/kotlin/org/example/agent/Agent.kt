@@ -12,7 +12,7 @@ import org.example.shared.model.CollectionSettings
 import org.example.shared.model.MessageRole
 import org.example.shared.model.ResponseFormat
 import org.example.shared.model.ToolCall
-import org.example.tools.ToolRegistry
+import org.example.tools.core.ToolRegistry
 import java.util.UUID
 
 /**

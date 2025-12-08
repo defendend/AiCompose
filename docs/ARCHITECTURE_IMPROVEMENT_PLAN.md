@@ -414,71 +414,112 @@ class SendMessageUseCase(
 
 ---
 
-## Фаза 6: Расширяемость инструментов (Приоритет: СРЕДНИЙ)
+## ✅ Фаза 6: Расширяемость инструментов (ВЫПОЛНЕНО)
 
 ### Цель
 Сделать добавление новых инструментов максимально простым.
 
-### Текущее состояние
-- Инструменты реализуют `AgentTool`
-- Регистрируются вручную в `ToolRegistry`
+### Реализовано
 
-### Улучшения
+#### 6.1 Структура пакетов tools
 
-#### 6.1 Аннотации для инструментов
+```
+backend/src/main/kotlin/org/example/tools/
+├── annotations/
+│   └── ToolAnnotations.kt      # @Tool, @Param, @Params
+├── core/
+│   ├── AgentTool.kt            # Интерфейс + AnnotatedAgentTool
+│   ├── ToolMetadata.kt         # ToolMetadata, ParamMetadata, ToolMetadataReader
+│   └── ToolRegistry.kt         # Реестр с автоинициализацией
+├── historical/
+│   ├── HistoricalEventsTool.kt
+│   ├── HistoricalFigureTool.kt
+│   ├── CompareErasTool.kt
+│   └── HistoricalQuoteTool.kt
+└── Tools.kt                    # Обратная совместимость (deprecated)
+```
+
+#### 6.2 Аннотации для инструментов
 
 ```kotlin
-@Target(AnnotationTarget.CLASS)
-annotation class Tool(
-    val name: String,
-    val description: String
-)
-
-@Target(AnnotationTarget.VALUE_PARAMETER)
-annotation class Param(
-    val description: String,
-    val required: Boolean = true
-)
-
 @Tool(
     name = "get_weather",
     description = "Получить погоду в городе"
 )
-class WeatherTool : AgentTool {
-    override suspend fun execute(
-        @Param("Название города") city: String
-    ): String {
+@Param(
+    name = "city",
+    description = "Название города",
+    type = "string",
+    required = true
+)
+@Param(
+    name = "units",
+    description = "Единицы измерения",
+    type = "string",
+    required = false,
+    enumValues = ["celsius", "fahrenheit"]
+)
+object WeatherTool : AnnotatedAgentTool() {
+    override suspend fun execute(arguments: String): String {
+        val json = Json.parseToJsonElement(arguments).jsonObject
+        val city = json["city"]?.jsonPrimitive?.content ?: return "Ошибка: не указан город"
         // implementation
     }
 }
 ```
 
-#### 6.2 Автоматическая регистрация
+**Особенности:**
+- `@Tool` — определяет имя и описание инструмента
+- `@Param` — определяет параметры (поддерживает @Repeatable)
+- `AnnotatedAgentTool` — базовый класс, автоматически генерирует `getDefinition()` из аннотаций
+- Поддержка enum параметров через `enumValues`
+
+#### 6.3 ToolRegistry
 
 ```kotlin
-object ToolRegistry {
-    private val tools = mutableListOf<AgentTool>()
+// Автоматическая инициализация при первом обращении
+val tools = ToolRegistry.getAllTools()
 
-    init {
-        // Автоматический поиск через ServiceLoader или Reflections
-        ServiceLoader.load(AgentTool::class.java).forEach { register(it) }
+// Ручная регистрация кастомного инструмента
+ToolRegistry.register(MyCustomTool)
+
+// Выполнение инструмента
+val result = ToolRegistry.executeTool("my_tool", """{"arg": "value"}""")
+```
+
+**Особенности:**
+- Thread-safe (ConcurrentHashMap)
+- Ленивая инициализация
+- Встроенные инструменты регистрируются автоматически
+- Graceful error handling при выполнении
+
+#### 6.4 Добавление нового инструмента
+
+1. Создать файл в `tools/` (или новом подпакете)
+2. Добавить аннотации `@Tool` и `@Param`
+3. Наследовать от `AnnotatedAgentTool`
+4. Реализовать `execute(arguments: String)`
+5. Зарегистрировать в `ToolRegistry.registerBuiltInTools()` (или через DI)
+
+```kotlin
+@Tool(name = "my_tool", description = "Мой инструмент")
+@Param(name = "input", description = "Входные данные", type = "string", required = true)
+object MyTool : AnnotatedAgentTool() {
+    override suspend fun execute(arguments: String): String {
+        val json = Json.parseToJsonElement(arguments).jsonObject
+        val input = json["input"]?.jsonPrimitive?.content
+            ?: return "Ошибка: не указан input"
+        return "Результат: $input"
     }
 }
 ```
 
-#### 6.3 Plugin система
-
-```kotlin
-interface ToolPlugin {
-    val tools: List<AgentTool>
-    fun initialize()
-}
-
-// Загрузка плагинов из JAR файлов
-class PluginLoader {
-    fun loadPlugins(directory: Path): List<ToolPlugin>
-}
-```
+### Результат ✅
+- Декларативное определение инструментов через аннотации
+- Автоматическая генерация Tool definition для LLM API
+- Модульная структура с разделением по категориям
+- 35 новых тестов для системы инструментов
+- Обратная совместимость через deprecated aliases
 
 ---
 
@@ -571,8 +612,8 @@ class PromptBuilderTest {
 | 7. Тестирование         | ВЫСОКИЙ   | Средняя   | Стабильность         | ✅ ВЫПОЛНЕНО |
 | 3. Dependency Injection | СРЕДНИЙ   | Низкая    | Чистый код           | ✅ ВЫПОЛНЕНО |
 | 8. CI Pipeline          | СРЕДНИЙ   | Низкая    | Автоматизация        | ✅ ВЫПОЛНЕНО |
-| 6. Расширяемость tools  | СРЕДНИЙ   | Средняя   | Гибкость             | ⏳ СЛЕДУЮЩИЙ |
-| 4. Персистентность      | СРЕДНИЙ   | Средняя   | Production-ready     |              |
+| 6. Расширяемость tools  | СРЕДНИЙ   | Средняя   | Гибкость             | ✅ ВЫПОЛНЕНО |
+| 4. Персистентность      | СРЕДНИЙ   | Средняя   | Production-ready     | ⏳ СЛЕДУЮЩИЙ |
 | 5. UseCase слой         | НИЗКИЙ    | Низкая    | Для масштабирования  |              |
 
 ---
@@ -612,10 +653,16 @@ class PromptBuilderTest {
 
 **Всего: 98 тестов, 100% успешных**
 
-### ⏳ Итерация 5 (Расширяемость) — СЛЕДУЮЩАЯ
-1. Расширяемость tools (аннотации, автоматическая регистрация)
+### ✅ Итерация 5 (Расширяемость) — ВЫПОЛНЕНО
+1. ✅ Аннотации @Tool и @Param для декларативного определения инструментов
+2. ✅ AnnotatedAgentTool базовый класс с автогенерацией definition
+3. ✅ ToolMetadataReader для чтения метаданных через рефлексию
+4. ✅ Модульная структура tools (core, annotations, historical)
+5. ✅ 35 новых тестов для системы инструментов
 
-### Итерация 6 (Production)
+**Всего: 133 теста, 100% успешных**
+
+### ⏳ Итерация 6 (Production) — СЛЕДУЮЩАЯ
 1. Redis для conversations
 2. Улучшить error handling
 3. Добавить метрики
