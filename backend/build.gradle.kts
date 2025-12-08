@@ -40,6 +40,10 @@ dependencies {
     // Logging
     implementation("ch.qos.logback:logback-classic:1.5.12")
 
+    // Redis (Lettuce)
+    implementation("io.lettuce:lettuce-core:6.3.2.RELEASE")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactive:1.9.0")
+
     // Dependency Injection
     implementation("io.insert-koin:koin-ktor:4.0.0")
     implementation("io.insert-koin:koin-logger-slf4j:4.0.0")

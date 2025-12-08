@@ -341,42 +341,68 @@ jobs:
 
 ---
 
-## Фаза 4: Персистентное хранение (Приоритет: СРЕДНИЙ)
+## ✅ Фаза 4: Персистентное хранение (ВЫПОЛНЕНО)
 
 ### Цель
 Сохранять историю диалогов между перезапусками сервера.
 
-### Варианты
+### Реализация: Redis (Lettuce)
 
-| Вариант | Плюсы | Минусы |
-|---------|-------|--------|
-| **SQLite** | Простота, файловое хранение | Не масштабируется |
-| **Redis** | Быстро, TTL для сессий | Нужен отдельный сервис |
-| **PostgreSQL** | Надёжно, SQL | Overhead для MVP |
+Добавлен `RedisConversationRepository` с использованием Lettuce (async Redis client).
 
-### Рекомендация: Redis
-
+#### Зависимости (backend/build.gradle.kts)
 ```kotlin
-class RedisConversationRepository(
-    private val redis: RedisClient
-) : ConversationRepository {
+implementation("io.lettuce:lettuce-core:6.3.2.RELEASE")
+implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactive:1.9.0")
+```
 
-    override fun getHistory(conversationId: String): List<LLMMessage> {
-        val json = redis.get("conv:$conversationId:messages")
-        return json?.let { Json.decodeFromString(it) } ?: emptyList()
+#### Структура ключей Redis
+- `conv:{id}:messages` — JSON массив сообщений диалога
+- `conv:{id}:format` — формат ответа (ResponseFormat)
+- `conv:{id}:settings` — настройки сбора данных (CollectionSettings)
+
+#### Конфигурация через env переменные
+```bash
+REDIS_ENABLED=true        # Включить Redis (по умолчанию: false)
+REDIS_URL=redis://host:6379   # URL Redis (по умолчанию: redis://localhost:6379)
+REDIS_TTL_HOURS=24        # TTL диалогов в часах (по умолчанию: 24)
+```
+
+#### DI конфигурация (AppModule.kt)
+```kotlin
+data class RepositoryConfig(
+    val useRedis: Boolean = false,
+    val redisUrl: String = "redis://localhost:6379",
+    val redisTtlSeconds: Long = 86400
+) {
+    companion object {
+        fun fromEnv(): RepositoryConfig // Читает из env переменных
     }
+}
 
-    override fun addMessage(conversationId: String, message: LLMMessage) {
-        val history = getHistory(conversationId).toMutableList()
-        history.add(message)
-        redis.setex(
-            "conv:$conversationId:messages",
-            3600 * 24, // TTL 24 часа
-            Json.encodeToString(history)
-        )
+fun appModule(apiKey: String, repositoryConfig: RepositoryConfig) = module {
+    single<ConversationRepository> {
+        if (repositoryConfig.useRedis) {
+            RedisConversationRepository(redisUrl, ttlSeconds)
+        } else {
+            InMemoryConversationRepository()
+        }
     }
 }
 ```
+
+#### Особенности реализации
+- **Lettuce async API** — используется `RedisAsyncCommands` с `await()` через `kotlinx-coroutines-reactive`
+- **TTL для диалогов** — автоматическое удаление через SETEX
+- **Graceful error handling** — логирование ошибок без падения приложения
+- **Thread-safe** — Lettuce connection pool
+- **Метод close()** — для корректного завершения соединения
+
+### Результат ✅
+- История диалогов сохраняется между перезапусками сервера
+- Переключение In-Memory ↔ Redis через env переменные
+- TTL для автоматической очистки старых диалогов
+- 3 новых теста для RepositoryConfig
 
 ---
 
@@ -613,8 +639,8 @@ class PromptBuilderTest {
 | 3. Dependency Injection | СРЕДНИЙ   | Низкая    | Чистый код           | ✅ ВЫПОЛНЕНО |
 | 8. CI Pipeline          | СРЕДНИЙ   | Низкая    | Автоматизация        | ✅ ВЫПОЛНЕНО |
 | 6. Расширяемость tools  | СРЕДНИЙ   | Средняя   | Гибкость             | ✅ ВЫПОЛНЕНО |
-| 4. Персистентность      | СРЕДНИЙ   | Средняя   | Production-ready     | ⏳ СЛЕДУЮЩИЙ |
-| 5. UseCase слой         | НИЗКИЙ    | Низкая    | Для масштабирования  |              |
+| 4. Персистентность      | СРЕДНИЙ   | Средняя   | Production-ready     | ✅ ВЫПОЛНЕНО |
+| 5. UseCase слой         | НИЗКИЙ    | Низкая    | Для масштабирования  | ⏳ СЛЕДУЮЩИЙ |
 
 ---
 
@@ -662,10 +688,19 @@ class PromptBuilderTest {
 
 **Всего: 133 теста, 100% успешных**
 
-### ⏳ Итерация 6 (Production) — СЛЕДУЮЩАЯ
-1. Redis для conversations
-2. Улучшить error handling
-3. Добавить метрики
+### ✅ Итерация 6 (Персистентность) — ВЫПОЛНЕНО
+1. ✅ Добавлен Lettuce (async Redis client) для Kotlin/JVM
+2. ✅ Реализован `RedisConversationRepository` с TTL и async операциями
+3. ✅ Конфигурация через env переменные (REDIS_ENABLED, REDIS_URL, REDIS_TTL_HOURS)
+4. ✅ DI переключение между In-Memory и Redis
+5. ✅ 3 новых теста для RepositoryConfig
+
+**Всего: 136 тестов, 100% успешных**
+
+### ⏳ Итерация 7 (Production) — СЛЕДУЮЩАЯ
+1. Улучшить error handling
+2. Добавить метрики
+3. Health check для Redis
 
 ---
 

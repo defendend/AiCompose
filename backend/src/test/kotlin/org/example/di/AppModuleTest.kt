@@ -14,6 +14,8 @@ import org.koin.test.get
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertSame
@@ -91,5 +93,39 @@ class AppModuleTest : KoinTest {
         val agent2: Agent = get()
 
         assertSame(agent1, agent2)
+    }
+}
+
+class RepositoryConfigTest {
+
+    @Test
+    fun `default config uses InMemory`() {
+        val config = RepositoryConfig()
+
+        assertFalse(config.useRedis)
+        assertEquals("redis://localhost:6379", config.redisUrl)
+        assertEquals(86400, config.redisTtlSeconds)
+    }
+
+    @Test
+    fun `config with Redis enabled`() {
+        val config = RepositoryConfig(
+            useRedis = true,
+            redisUrl = "redis://myhost:6380",
+            redisTtlSeconds = 3600
+        )
+
+        assertEquals(true, config.useRedis)
+        assertEquals("redis://myhost:6380", config.redisUrl)
+        assertEquals(3600, config.redisTtlSeconds)
+    }
+
+    @Test
+    fun `fromEnv returns default when no env vars set`() {
+        // Без установленных переменных окружения должны получить дефолты
+        val config = RepositoryConfig.fromEnv()
+
+        // REDIS_ENABLED по умолчанию не установлена, поэтому useRedis = false
+        assertFalse(config.useRedis)
     }
 }
