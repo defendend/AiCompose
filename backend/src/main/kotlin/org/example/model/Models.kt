@@ -79,10 +79,10 @@ data class Choice(
 data class LLMStreamRequest(
     val model: String,
     val messages: List<LLMMessage>,
+    val stream: Boolean,
     val tools: List<Tool>? = null,
     val max_tokens: Int = 4096,
-    val temperature: Float? = null,
-    val stream: Boolean = true
+    val temperature: Float? = null
 )
 
 @Serializable

@@ -10,8 +10,11 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.utils.io.*
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.example.logging.AppLogger
 import org.example.model.ServerLogsResponse
@@ -24,7 +27,7 @@ import org.example.shared.model.ResponseFormat
 import org.example.shared.model.StreamEvent
 
 class ChatApiClient(
-    private val baseUrl: String = "http://89.169.190.22:8080"
+    private val baseUrl: String = "http://89.169.190.22"
 ) {
     private val jsonParser = Json {
         prettyPrint = true
@@ -105,51 +108,61 @@ class ChatApiClient(
         responseFormat: ResponseFormat = ResponseFormat.PLAIN,
         collectionSettings: CollectionSettings? = null,
         temperature: Float? = null
-    ): Flow<StreamEvent> = flow {
+    ): Flow<StreamEvent> = callbackFlow {
         AppLogger.info("ChatApiClient", "Отправка streaming запроса: $text")
 
-        try {
-            client.preparePost("$baseUrl/api/chat/stream") {
-                contentType(ContentType.Application.Json)
-                setBody(ChatStreamRequest(
-                    message = text,
-                    conversationId = conversationId,
-                    responseFormat = responseFormat,
-                    collectionSettings = collectionSettings,
-                    temperature = temperature
-                ))
-            }.execute { response ->
-                if (!response.status.isSuccess()) {
-                    val errorBody = response.bodyAsText()
-                    AppLogger.error("ChatApiClient", "Streaming error: ${response.status} - $errorBody")
-                    throw Exception("Ошибка сервера: ${response.status}")
-                }
+        launch {
+            try {
+                client.preparePost("$baseUrl/api/chat/stream") {
+                    contentType(ContentType.Application.Json)
+                    setBody(ChatStreamRequest(
+                        message = text,
+                        conversationId = conversationId,
+                        responseFormat = responseFormat,
+                        collectionSettings = collectionSettings,
+                        temperature = temperature
+                    ))
+                }.execute { response ->
+                    if (!response.status.isSuccess()) {
+                        val errorBody = response.bodyAsText()
+                        AppLogger.error("ChatApiClient", "Streaming error: ${response.status} - $errorBody")
+                        throw Exception("Ошибка сервера: ${response.status}")
+                    }
 
-                val channel: ByteReadChannel = response.bodyAsChannel()
+                    val channel: ByteReadChannel = response.bodyAsChannel()
 
-                while (!channel.isClosedForRead) {
-                    val line = channel.readUTF8Line() ?: break
+                    while (!channel.isClosedForRead) {
+                        val line = channel.readUTF8Line() ?: break
 
-                    if (line.startsWith("data: ")) {
-                        val data = line.removePrefix("data: ").trim()
+                        AppLogger.info("ChatApiClient", "SSE line: $line")
 
-                        if (data.isNotEmpty() && data != "[DONE]") {
-                            try {
-                                val event = jsonParser.decodeFromString<StreamEvent>(data)
-                                emit(event)
-                            } catch (e: Exception) {
-                                AppLogger.error("ChatApiClient", "Failed to parse stream event: $data")
+                        if (line.startsWith("data: ")) {
+                            val data = line.removePrefix("data: ").trim()
+
+                            if (data.isNotEmpty() && data != "[DONE]") {
+                                try {
+                                    val event = jsonParser.decodeFromString<StreamEvent>(data)
+                                    trySend(event)
+                                    AppLogger.info("ChatApiClient", "Emitted event: ${event.type}")
+                                } catch (e: Exception) {
+                                    AppLogger.error("ChatApiClient", "Failed to parse stream event: $data - ${e.message}")
+                                }
                             }
                         }
                     }
                 }
+
+                AppLogger.info("ChatApiClient", "Streaming завершён")
+                close()
+
+            } catch (e: Exception) {
+                AppLogger.error("ChatApiClient", "Ошибка streaming: ${e.message}")
+                close(e)
             }
+        }
 
-            AppLogger.info("ChatApiClient", "Streaming завершён")
-
-        } catch (e: Exception) {
-            AppLogger.error("ChatApiClient", "Ошибка streaming: ${e.message}")
-            throw e
+        awaitClose {
+            AppLogger.info("ChatApiClient", "Flow closed")
         }
     }
 

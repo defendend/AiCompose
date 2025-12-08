@@ -1,7 +1,7 @@
 package org.example.agent
 
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.channelFlow
 import org.example.data.ConversationRepository
 import org.example.data.DeepSeekClient
 import org.example.data.InMemoryConversationRepository
@@ -163,11 +163,11 @@ class Agent(
         format: ResponseFormat = ResponseFormat.PLAIN,
         collectionSettings: CollectionSettings? = null,
         temperature: Float? = null
-    ): Flow<StreamEvent> = flow {
+    ): Flow<StreamEvent> = channelFlow {
         val messageId = UUID.randomUUID().toString()
 
-        // Emit start event
-        emit(StreamEvent(
+        // Send start event
+        send(StreamEvent(
             type = StreamEventType.START,
             conversationId = conversationId,
             messageId = messageId
@@ -217,7 +217,7 @@ class Agent(
                     // Content delta
                     choice.delta?.content?.let { content ->
                         contentBuffer.append(content)
-                        emit(StreamEvent(
+                        send(StreamEvent(
                             type = StreamEventType.CONTENT,
                             content = content,
                             conversationId = conversationId,
@@ -249,9 +249,9 @@ class Agent(
                             tool_calls = fixedToolCalls
                         ))
 
-                        // Выполняем инструменты и emit результаты
+                        // Выполняем инструменты и send результаты
                         for (toolCall in fixedToolCalls) {
-                            emit(StreamEvent(
+                            send(StreamEvent(
                                 type = StreamEventType.TOOL_CALL,
                                 toolCall = ToolCall(
                                     id = toolCall.id,
@@ -264,7 +264,7 @@ class Agent(
 
                             val result = ToolRegistry.executeTool(toolCall.function.name, toolCall.function.arguments)
 
-                            emit(StreamEvent(
+                            send(StreamEvent(
                                 type = StreamEventType.TOOL_RESULT,
                                 toolResult = result,
                                 conversationId = conversationId,
@@ -295,15 +295,15 @@ class Agent(
                 }
             }
 
-            // Emit done event
-            emit(StreamEvent(
+            // Send done event
+            send(StreamEvent(
                 type = StreamEventType.DONE,
                 conversationId = conversationId,
                 messageId = messageId
             ))
 
         } catch (e: Exception) {
-            emit(StreamEvent(
+            send(StreamEvent(
                 type = StreamEventType.ERROR,
                 error = e.message ?: "Неизвестная ошибка",
                 conversationId = conversationId,

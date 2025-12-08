@@ -11,6 +11,7 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
@@ -182,7 +183,7 @@ class DeepSeekClient(
         tools: List<Tool>,
         temperature: Float?,
         conversationId: String
-    ): Flow<LLMStreamChunk> = flow {
+    ): Flow<LLMStreamChunk> = channelFlow {
         val messagesPreview = messages.joinToString("\n") { msg ->
             val content = msg.content?.take(200) ?: (msg.tool_calls?.firstOrNull()?.let { "tool_call: ${it.function.name}" } ?: "")
             "[${msg.role}] $content"
@@ -193,9 +194,9 @@ class DeepSeekClient(
         val request = LLMStreamRequest(
             model = model,
             messages = messages,
+            stream = true,
             tools = if (tools.isNotEmpty()) tools else null,
-            temperature = temperature,
-            stream = true
+            temperature = temperature
         )
 
         val requestJson = jsonPretty.encodeToString(LLMStreamRequest.serializer(), request)
@@ -242,7 +243,7 @@ class DeepSeekClient(
                         if (data.isNotEmpty()) {
                             try {
                                 val chunk = jsonParser.decodeFromString<LLMStreamChunk>(data)
-                                emit(chunk)
+                                send(chunk)
 
                                 // Собираем контент для логирования
                                 chunk.choices.firstOrNull()?.delta?.content?.let {

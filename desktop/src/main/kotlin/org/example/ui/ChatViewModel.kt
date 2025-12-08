@@ -6,7 +6,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.example.logging.AppLogger
 import org.example.network.ChatApiClient
 import org.example.shared.model.ChatMessage
@@ -19,7 +21,7 @@ import java.util.UUID
 class ChatViewModel(
     private val apiClient: ChatApiClient = ChatApiClient()
 ) {
-    private val scope = CoroutineScope(Dispatchers.Default)
+    private val scope = CoroutineScope(Dispatchers.IO)
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
@@ -33,7 +35,7 @@ class ChatViewModel(
     private val _streamingContent = MutableStateFlow("")
     val streamingContent: StateFlow<String> = _streamingContent.asStateFlow()
 
-    private val _useStreaming = MutableStateFlow(true)  // По умолчанию включён streaming
+    private val _useStreaming = MutableStateFlow(true)  // Streaming включён по умолчанию
     val useStreaming: StateFlow<Boolean> = _useStreaming.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
@@ -72,6 +74,7 @@ class ChatViewModel(
     }
 
     fun sendMessage(text: String) {
+        AppLogger.info("ChatViewModel", "sendMessage called, useStreaming=${_useStreaming.value}")
         if (_useStreaming.value) {
             sendMessageStreaming(text)
         } else {
@@ -117,56 +120,64 @@ class ChatViewModel(
                     responseFormat = _responseFormat.value,
                     collectionSettings = if (shouldSendSettings) currentSettings else null,
                     temperature = _temperature.value
-                ).catch { e ->
+                ).flowOn(Dispatchers.IO)
+                .catch { e ->
                     AppLogger.error("ChatViewModel", "Streaming ошибка: ${e.message}")
-                    _error.value = e.message ?: "Ошибка streaming"
+                    withContext(Dispatchers.Main) {
+                        _error.value = e.message ?: "Ошибка streaming"
+                    }
                 }.collect { event ->
-                    when (event.type) {
-                        StreamEventType.START -> {
-                            conversationId = event.conversationId
-                            messageId = event.messageId
-                            AppLogger.info("ChatViewModel", "Streaming начат: ${event.messageId}")
-                        }
-
-                        StreamEventType.CONTENT -> {
-                            event.content?.let { content ->
-                                contentBuilder.append(content)
-                                _streamingContent.value = contentBuilder.toString()
+                    withContext(Dispatchers.Main) {
+                        when (event.type) {
+                            StreamEventType.START -> {
+                                conversationId = event.conversationId
+                                messageId = event.messageId
+                                AppLogger.info("ChatViewModel", "Streaming начат: ${event.messageId}")
                             }
-                        }
 
-                        StreamEventType.TOOL_CALL -> {
-                            event.toolCall?.let { toolCall ->
-                                AppLogger.info("ChatViewModel", "Агент вызывает инструмент: ${toolCall.name}")
+                            StreamEventType.CONTENT -> {
+                                event.content?.let { content ->
+                                    contentBuilder.append(content)
+                                    _streamingContent.value = contentBuilder.toString()
+                                    AppLogger.info("ChatViewModel", "Content update: ${contentBuilder.length} chars")
+                                }
                             }
-                        }
 
-                        StreamEventType.TOOL_RESULT -> {
-                            AppLogger.info("ChatViewModel", "Результат инструмента получен")
-                        }
+                            StreamEventType.TOOL_CALL -> {
+                                event.toolCall?.let { toolCall ->
+                                    AppLogger.info("ChatViewModel", "Агент вызывает инструмент: ${toolCall.name}")
+                                }
+                            }
 
-                        StreamEventType.DONE -> {
-                            // Добавляем финальное сообщение в список
-                            val assistantMessage = ChatMessage(
-                                id = messageId ?: UUID.randomUUID().toString(),
-                                role = MessageRole.ASSISTANT,
-                                content = contentBuilder.toString(),
-                                timestamp = System.currentTimeMillis()
-                            )
-                            _messages.value = _messages.value + assistantMessage
-                            _streamingContent.value = ""
-                            AppLogger.info("ChatViewModel", "Streaming завершён")
-                        }
+                            StreamEventType.TOOL_RESULT -> {
+                                AppLogger.info("ChatViewModel", "Результат инструмента получен")
+                            }
 
-                        StreamEventType.ERROR -> {
-                            AppLogger.error("ChatViewModel", "Ошибка от сервера: ${event.error}")
-                            _error.value = event.error ?: "Ошибка сервера"
+                            StreamEventType.DONE -> {
+                                // Добавляем финальное сообщение в список
+                                val assistantMessage = ChatMessage(
+                                    id = messageId ?: UUID.randomUUID().toString(),
+                                    role = MessageRole.ASSISTANT,
+                                    content = contentBuilder.toString(),
+                                    timestamp = System.currentTimeMillis()
+                                )
+                                _messages.value = _messages.value + assistantMessage
+                                _streamingContent.value = ""
+                                AppLogger.info("ChatViewModel", "Streaming завершён, content: ${contentBuilder.length} chars")
+                            }
+
+                            StreamEventType.ERROR -> {
+                                AppLogger.error("ChatViewModel", "Ошибка от сервера: ${event.error}")
+                                _error.value = event.error ?: "Ошибка сервера"
+                            }
                         }
                     }
                 }
             } catch (e: Exception) {
                 AppLogger.error("ChatViewModel", "Исключение при streaming: ${e.message}")
-                _error.value = e.message ?: "Неизвестная ошибка"
+                withContext(Dispatchers.Main) {
+                    _error.value = e.message ?: "Неизвестная ошибка"
+                }
             }
 
             _isLoading.value = false

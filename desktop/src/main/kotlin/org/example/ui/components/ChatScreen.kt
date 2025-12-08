@@ -45,6 +45,8 @@ private val solveModes = listOf(
 fun ChatScreen(viewModel: ChatViewModel) {
     val messages by viewModel.messages.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val isStreaming by viewModel.isStreaming.collectAsState()
+    val streamingContent by viewModel.streamingContent.collectAsState()
     val error by viewModel.error.collectAsState()
     val responseFormat by viewModel.responseFormat.collectAsState()
     val collectionSettings by viewModel.collectionSettings.collectAsState()
@@ -52,9 +54,13 @@ fun ChatScreen(viewModel: ChatViewModel) {
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
+    // Автоскролл при новых сообщениях или streaming контенте
+    LaunchedEffect(messages.size, streamingContent) {
+        if (messages.isNotEmpty() || streamingContent.isNotEmpty()) {
+            val targetIndex = if (isStreaming) messages.size else messages.size - 1
+            if (targetIndex >= 0) {
+                listState.animateScrollToItem(targetIndex.coerceAtLeast(0))
+            }
         }
     }
 
@@ -182,7 +188,12 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 MessageBubble(message)
             }
 
-            if (isLoading) {
+            // Показываем streaming контент пока идёт загрузка
+            if (isStreaming && streamingContent.isNotEmpty()) {
+                item(key = "streaming") {
+                    StreamingBubble(streamingContent)
+                }
+            } else if (isLoading && !isStreaming) {
                 item {
                     LoadingIndicator()
                 }
@@ -340,6 +351,47 @@ private fun MessageBubble(message: ChatMessage) {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun StreamingBubble(content: String) {
+    val backgroundColor = MaterialTheme.colorScheme.surfaceVariant
+    val textColor = MaterialTheme.colorScheme.onSurfaceVariant
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Start
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 600.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(backgroundColor)
+                .padding(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Агент",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = textColor.copy(alpha = 0.7f)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                CircularProgressIndicator(
+                    modifier = Modifier.size(12.dp),
+                    strokeWidth = 1.5.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = content,
+                style = MaterialTheme.typography.bodyMedium,
+                color = textColor
+            )
         }
     }
 }
