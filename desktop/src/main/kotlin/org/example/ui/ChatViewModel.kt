@@ -7,11 +7,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.example.logging.AppLogger
-import org.example.model.ChatMessage
-import org.example.model.CollectionSettings
-import org.example.model.MessageRole
-import org.example.model.ResponseFormat
 import org.example.network.ChatApiClient
+import org.example.shared.model.ChatMessage
+import org.example.shared.model.CollectionSettings
+import org.example.shared.model.MessageRole
+import org.example.shared.model.ResponseFormat
+import java.util.UUID
 
 class ChatViewModel(
     private val apiClient: ChatApiClient = ChatApiClient()
@@ -58,8 +59,10 @@ class ChatViewModel(
         if (text.isBlank()) return
 
         val userMessage = ChatMessage(
+            id = UUID.randomUUID().toString(),
             role = MessageRole.USER,
-            content = text
+            content = text,
+            timestamp = System.currentTimeMillis()
         )
 
         _messages.value = _messages.value + userMessage
@@ -87,10 +90,10 @@ class ChatViewModel(
                     conversationId = response.conversationId
                     _messages.value = _messages.value + response.message
 
-                    if (response.message.toolCall != null) {
+                    response.message.toolCall?.let { toolCall ->
                         AppLogger.info(
                             "ChatViewModel",
-                            "Агент вызвал инструмент: ${response.message.toolCall.name}"
+                            "Агент вызвал инструмент: ${toolCall.name}"
                         )
                     }
                 }

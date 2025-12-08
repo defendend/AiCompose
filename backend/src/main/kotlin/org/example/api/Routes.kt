@@ -8,9 +8,9 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.example.agent.Agent
 import org.example.logging.ServerLogger
-import org.example.model.ChatRequest
 import org.example.model.LogCategory
 import org.example.model.LogLevel
+import org.example.shared.model.ChatRequest
 import java.util.UUID
 
 private val json = Json { prettyPrint = true }

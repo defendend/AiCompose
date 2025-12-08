@@ -17,10 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import org.example.model.CollectionMode
 import org.example.model.CollectionModeTemplate
 import org.example.model.CollectionModeTemplates
-import org.example.model.CollectionSettings
+import org.example.shared.model.CollectionMode
+import org.example.shared.model.CollectionSettings
 
 // Предустановленные персонажи агента
 data class AgentPersona(

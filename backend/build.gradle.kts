@@ -15,6 +15,8 @@ ktor {
 }
 
 dependencies {
+    implementation(project(":shared"))
+
     // Ktor Server
     implementation("io.ktor:ktor-server-core:3.0.3")
     implementation("io.ktor:ktor-server-netty:3.0.3")

@@ -1,4 +1,4 @@
-package org.example.model
+package org.example.shared.model
 
 import kotlinx.serialization.Serializable
 
@@ -27,19 +27,3 @@ enum class CollectionMode {
     /** Группа экспертов — несколько экспертов дают свои решения */
     SOLVE_EXPERT_PANEL
 }
-
-/**
- * Настройки для режима сбора данных
- */
-@Serializable
-data class CollectionSettings(
-    val mode: CollectionMode = CollectionMode.NONE,
-    /** Пользовательское описание для режима CUSTOM */
-    val customPrompt: String = "",
-    /** Название результата (например, "Техническое задание") */
-    val resultTitle: String = "",
-    /** Включён ли режим сбора */
-    val enabled: Boolean = false,
-    /** Пользовательский системный промпт (персонаж агента) */
-    val customSystemPrompt: String = ""
-)

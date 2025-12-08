@@ -19,13 +19,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.serialization.json.Json
-import org.example.model.ChatMessage
-import org.example.model.CollectionMode
 import org.example.model.CollectionModeTemplates
-import org.example.model.CollectionSettings
-import org.example.model.MessageRole
-import org.example.model.ResponseFormat
 import org.example.model.StructuredResponse
+import org.example.shared.model.ChatMessage
+import org.example.shared.model.CollectionMode
+import org.example.shared.model.CollectionSettings
+import org.example.shared.model.MessageRole
+import org.example.shared.model.ResponseFormat
 import org.example.ui.ChatViewModel
 
 private val jsonFormatter = Json {

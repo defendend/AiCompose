@@ -11,9 +11,20 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.example.logging.ServerLogger
-import org.example.model.*
-import org.example.model.ResponseFormat
+import org.example.model.LLMMessage
+import org.example.model.LLMRequest
+import org.example.model.LLMResponse
+import org.example.model.LLMToolCall
+import org.example.model.LogCategory
+import org.example.shared.model.ChatMessage
+import org.example.shared.model.ChatResponse
+import org.example.shared.model.CollectionMode
+import org.example.shared.model.CollectionSettings
+import org.example.shared.model.MessageRole
+import org.example.shared.model.ResponseFormat
+import org.example.shared.model.ToolCall
 import org.example.tools.ToolRegistry
+import java.util.UUID
 
 class Agent(
     private val apiKey: String,
@@ -439,8 +450,10 @@ class Agent(
         // Возвращаем ответ
         return ChatResponse(
             message = ChatMessage(
+                id = UUID.randomUUID().toString(),
                 role = MessageRole.ASSISTANT,
                 content = currentMessage.content ?: "",
+                timestamp = System.currentTimeMillis(),
                 toolCall = firstToolCall?.let { tc ->
                     ToolCall(
                         id = tc.id,

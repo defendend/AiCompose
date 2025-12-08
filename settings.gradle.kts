@@ -3,5 +3,6 @@ plugins {
 }
 rootProject.name = "AiCompose"
 
+include(":shared")
 include(":desktop")
 include(":backend")

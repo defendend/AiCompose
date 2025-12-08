@@ -10,11 +10,11 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 import org.example.logging.AppLogger
-import org.example.model.ChatRequest
-import org.example.model.ChatResponse
-import org.example.model.CollectionSettings
-import org.example.model.ResponseFormat
 import org.example.model.ServerLogsResponse
+import org.example.shared.model.ChatRequest
+import org.example.shared.model.ChatResponse
+import org.example.shared.model.CollectionSettings
+import org.example.shared.model.ResponseFormat
 
 class ChatApiClient(
     private val baseUrl: String = "http://89.169.190.22:8080"

@@ -12,7 +12,6 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.*
 import org.example.logging.AppLogger
-import org.example.model.CollectionMode
 import org.example.model.CollectionModeTemplates
 import org.example.network.ChatApiClient
 import org.example.ui.ChatViewModel
