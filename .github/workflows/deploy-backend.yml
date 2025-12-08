@@ -5,11 +5,12 @@ on:
     branches: [ main ]
     paths:
       - 'backend/**'
+      - 'shared/**'
       - '.github/workflows/deploy-backend.yml'
   workflow_dispatch:
 
 jobs:
-  deploy-backend:
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,6 +23,37 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
           cache: 'gradle'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run tests
+        run: ./gradlew :backend:test --no-daemon
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: backend/build/test-results/
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
       - name: Build backend JAR
         run: ./gradlew :backend:buildFatJar --no-daemon

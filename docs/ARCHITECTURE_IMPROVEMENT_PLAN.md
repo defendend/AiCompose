@@ -195,7 +195,7 @@ class Agent(
 
 ---
 
-## Фаза 3: Dependency Injection (Приоритет: СРЕДНИЙ)
+## ✅ Фаза 3: Dependency Injection (ВЫПОЛНЕНО)
 
 ### Цель
 Внедрить Koin для управления зависимостями.
@@ -205,24 +205,30 @@ class Agent(
 ```kotlin
 // backend/build.gradle.kts
 dependencies {
-    implementation("io.insert-koin:koin-ktor:3.5.3")
+    implementation("io.insert-koin:koin-ktor:4.0.0")
+    implementation("io.insert-koin:koin-logger-slf4j:4.0.0")
 }
 
 // di/AppModule.kt
-val appModule = module {
-    single { DeepSeekClient(getProperty("DEEPSEEK_API_KEY")) } bind LLMClient::class
-    single { InMemoryConversationRepository() } bind ConversationRepository::class
-    single { PromptBuilder() }
-    single { ToolExecutor(get()) }
+fun appModule(apiKey: String) = module {
+    single<LLMClient> { DeepSeekClient(apiKey) }
+    single<ConversationRepository> { InMemoryConversationRepository() }
+    singleOf(::PromptBuilder)
+    singleOf(::ToolExecutor)
     single { Agent(get(), get(), get(), get()) }
 }
 
 // Application.kt
-fun Application.module() {
+fun Application.configureKoin(apiKey: String) {
     install(Koin) {
-        modules(appModule)
+        slf4jLogger()
+        modules(appModule(apiKey))
     }
-    configureRouting()
+}
+
+fun Application.configureRouting() {
+    val agent by inject<Agent>()
+    routing { chatRoutes(agent) }
 }
 ```
 
@@ -231,27 +237,107 @@ fun Application.module() {
 ```kotlin
 // desktop/build.gradle.kts
 dependencies {
-    implementation("io.insert-koin:koin-compose:3.5.3")
+    implementation("io.insert-koin:koin-core:4.0.0")
+    implementation("io.insert-koin:koin-compose:4.0.0")
 }
 
 // di/AppModule.kt
 val appModule = module {
-    single { ChatApiClient() }
-    viewModel { ChatViewModel(get()) }
+    singleOf(::ChatApiClient)
+    single { ChatViewModel(get()) }
 }
 
 // Main.kt
 fun main() = application {
     KoinApplication(application = { modules(appModule) }) {
-        Window { App() }
+        App()
+    }
+}
+
+@Composable
+private fun ApplicationScope.App() {
+    val chatViewModel: ChatViewModel = koinInject()
+    val apiClient: ChatApiClient = koinInject()
+    // ...
+}
+```
+
+### Тестирование DI
+
+```kotlin
+// AppModuleTest.kt
+class AppModuleTest : KoinTest {
+    @BeforeTest
+    fun setup() {
+        startKoin { modules(appModule("test-api-key")) }
+    }
+
+    @Test
+    fun `module provides Agent with all dependencies`() {
+        val agent: Agent = get()
+        assertNotNull(agent)
+    }
+
+    @Test
+    fun `LLMClient is singleton`() {
+        val client1: LLMClient = get()
+        val client2: LLMClient = get()
+        assertSame(client1, client2)
     }
 }
 ```
 
-### Результат
+### Результат ✅
 - Централизованное управление зависимостями
 - Легко подменять реализации для тестов
+- Koin 4.0.0 с поддержкой Compose
+- 8 тестов для DI модуля
 - Чистый код без ручного создания объектов
+
+---
+
+## ✅ Фаза 8: CI Pipeline (ВЫПОЛНЕНО)
+
+### Цель
+Автоматизировать сборку и тестирование при каждом push/PR.
+
+### CI Workflow (.github/workflows/ci.yml)
+
+Запускается на:
+- Push в `main`
+- Pull Request в `main`
+
+Шаги:
+1. Setup JDK 21
+2. Build shared module
+3. Build and test backend
+4. Compile desktop
+
+```yaml
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+      - run: ./gradlew :shared:build :backend:build :desktop:compileKotlin
+```
+
+### Deploy Workflow (обновлён)
+
+- Добавлен отдельный job `test` перед `deploy`
+- Deploy зависит от успешного прохождения тестов (`needs: test`)
+- Триггерится при изменениях в `backend/**` или `shared/**`
+
+### Результат ✅
+- Автоматическая проверка при каждом PR
+- Тесты запускаются перед деплоем
+- Артефакты с результатами тестов
+- JUnit report в GitHub Actions
 
 ---
 
@@ -483,8 +569,9 @@ class PromptBuilderTest {
 | 1. Shared модуль        | ВЫСОКИЙ   | Средняя   | Убирает дублирование | ✅ ВЫПОЛНЕНО |
 | 2. Декомпозиция Agent   | ВЫСОКИЙ   | Высокая   | Улучшает поддержку   | ✅ ВЫПОЛНЕНО |
 | 7. Тестирование         | ВЫСОКИЙ   | Средняя   | Стабильность         | ✅ ВЫПОЛНЕНО |
-| 3. Dependency Injection | СРЕДНИЙ   | Низкая    | Чистый код           | ⏳ СЛЕДУЮЩИЙ |
-| 6. Расширяемость tools  | СРЕДНИЙ   | Средняя   | Гибкость             |              |
+| 3. Dependency Injection | СРЕДНИЙ   | Низкая    | Чистый код           | ✅ ВЫПОЛНЕНО |
+| 8. CI Pipeline          | СРЕДНИЙ   | Низкая    | Автоматизация        | ✅ ВЫПОЛНЕНО |
+| 6. Расширяемость tools  | СРЕДНИЙ   | Средняя   | Гибкость             | ⏳ СЛЕДУЮЩИЙ |
 | 4. Персистентность      | СРЕДНИЙ   | Средняя   | Production-ready     |              |
 | 5. UseCase слой         | НИЗКИЙ    | Низкая    | Для масштабирования  |              |
 
@@ -516,11 +603,19 @@ class PromptBuilderTest {
 
 **Всего: 90 тестов, 100% успешных**
 
-### ⏳ Итерация 4 (DI и CI) — СЛЕДУЮЩАЯ
-1. Внедрить Koin для DI
-2. Настроить CI с тестами
+### ✅ Итерация 4 (DI и CI) — ВЫПОЛНЕНО
+1. ✅ Внедрить Koin для DI в backend
+2. ✅ Внедрить Koin для DI в desktop
+3. ✅ Настроить CI workflow (ci.yml)
+4. ✅ Добавить тесты в deploy workflow
+5. ✅ Тесты для DI модуля (8 тестов)
 
-### Итерация 5 (Production)
+**Всего: 98 тестов, 100% успешных**
+
+### ⏳ Итерация 5 (Расширяемость) — СЛЕДУЮЩАЯ
+1. Расширяемость tools (аннотации, автоматическая регистрация)
+
+### Итерация 6 (Production)
 1. Redis для conversations
 2. Улучшить error handling
 3. Добавить метрики

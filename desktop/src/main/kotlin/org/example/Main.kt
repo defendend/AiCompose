@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.*
+import org.example.di.appModule
 import org.example.logging.AppLogger
 import org.example.model.CollectionModeTemplates
 import org.example.network.ChatApiClient
@@ -20,6 +21,8 @@ import org.example.ui.components.LogWindow
 import org.example.ui.components.ServerLogWindow
 import org.example.ui.components.SettingsScreen
 import org.example.ui.theme.AppTheme
+import org.koin.compose.KoinApplication
+import org.koin.compose.koinInject
 
 enum class Screen {
     CHAT,
@@ -29,11 +32,19 @@ enum class Screen {
 fun main() = application {
     AppLogger.info("App", "Приложение запущено")
 
+    KoinApplication(application = { modules(appModule) }) {
+        App()
+    }
+}
+
+@Composable
+private fun ApplicationScope.App() {
     var showLogWindow by remember { mutableStateOf(false) }
     var showServerLogWindow by remember { mutableStateOf(false) }
     var currentScreen by remember { mutableStateOf(Screen.CHAT) }
-    val chatViewModel = remember { ChatViewModel() }
-    val apiClient = remember { ChatApiClient() }
+
+    val chatViewModel: ChatViewModel = koinInject()
+    val apiClient: ChatApiClient = koinInject()
 
     Window(
         onCloseRequest = ::exitApplication,

@@ -26,6 +26,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.9.0")
 
+    // Dependency Injection
+    implementation("io.insert-koin:koin-core:4.0.0")
+    implementation("io.insert-koin:koin-compose:4.0.0")
+
     testImplementation(kotlin("test"))
 }
 

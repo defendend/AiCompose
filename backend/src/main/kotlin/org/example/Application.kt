@@ -14,8 +14,12 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
 import org.example.agent.Agent
 import org.example.api.chatRoutes
+import org.example.di.appModule
 import org.example.logging.ServerLogger
 import org.example.model.LogLevel
+import org.koin.ktor.ext.inject
+import org.koin.ktor.plugin.Koin
+import org.koin.logger.slf4jLogger
 import org.slf4j.LoggerFactory
 import org.slf4j.event.Level
 
@@ -28,43 +32,69 @@ fun main() {
     logger.info("Запуск сервера AiCompose Backend...")
     ServerLogger.logSystem("Запуск сервера AiCompose Backend...", LogLevel.INFO)
 
-    val agent = Agent(apiKey = apiKey)
-
     embeddedServer(Netty, port = 8080, host = "0.0.0.0") {
-        install(ContentNegotiation) {
-            json(Json {
-                prettyPrint = true
-                isLenient = true
-                ignoreUnknownKeys = true
-            })
-        }
-
-        install(CORS) {
-            anyHost()
-            allowHeader(HttpHeaders.ContentType)
-            allowHeader(HttpHeaders.Authorization)
-            allowMethod(HttpMethod.Get)
-            allowMethod(HttpMethod.Post)
-            allowMethod(HttpMethod.Delete)
-            allowMethod(HttpMethod.Options)
-        }
-
-        install(CallLogging) {
-            level = Level.INFO
-        }
-
-        install(StatusPages) {
-            exception<Throwable> { call, cause ->
-                logger.error("Unhandled exception", cause)
-                call.respond(
-                    HttpStatusCode.InternalServerError,
-                    mapOf("error" to (cause.message ?: "Internal server error"))
-                )
-            }
-        }
-
-        routing {
-            chatRoutes(agent)
-        }
+        configureKoin(apiKey)
+        configurePlugins()
+        configureRouting()
     }.start(wait = true)
+}
+
+/**
+ * Конфигурация Koin DI.
+ */
+fun Application.configureKoin(apiKey: String) {
+    install(Koin) {
+        slf4jLogger()
+        modules(appModule(apiKey))
+    }
+}
+
+/**
+ * Конфигурация Ktor плагинов.
+ */
+fun Application.configurePlugins() {
+    val logger = LoggerFactory.getLogger("Application")
+
+    install(ContentNegotiation) {
+        json(Json {
+            prettyPrint = true
+            isLenient = true
+            ignoreUnknownKeys = true
+        })
+    }
+
+    install(CORS) {
+        anyHost()
+        allowHeader(HttpHeaders.ContentType)
+        allowHeader(HttpHeaders.Authorization)
+        allowMethod(HttpMethod.Get)
+        allowMethod(HttpMethod.Post)
+        allowMethod(HttpMethod.Delete)
+        allowMethod(HttpMethod.Options)
+    }
+
+    install(CallLogging) {
+        level = Level.INFO
+    }
+
+    install(StatusPages) {
+        exception<Throwable> { call, cause ->
+            logger.error("Unhandled exception", cause)
+            call.respond(
+                HttpStatusCode.InternalServerError,
+                mapOf("error" to (cause.message ?: "Internal server error"))
+            )
+        }
+    }
+}
+
+/**
+ * Конфигурация роутинга с инжектированными зависимостями.
+ */
+fun Application.configureRouting() {
+    val agent by inject<Agent>()
+
+    routing {
+        chatRoutes(agent)
+    }
 }
