@@ -10,7 +10,7 @@ import org.koin.dsl.module
  */
 val appModule = module {
     // Network layer
-    singleOf(::ChatApiClient)
+    single { ChatApiClient() }
 
     // UI layer
     single { ChatViewModel(get()) }
