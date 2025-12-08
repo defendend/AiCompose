@@ -34,7 +34,7 @@ fun Route.chatRoutes(agent: Agent) {
                     conversationId = conversationId
                 )
 
-                val response = agent.chat(request.message, conversationId, request.responseFormat, request.collectionSettings)
+                val response = agent.chat(request.message, conversationId, request.responseFormat, request.collectionSettings, request.temperature)
                 val responseBody = json.encodeToString(response)
                 val duration = System.currentTimeMillis() - startTime
 

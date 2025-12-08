@@ -342,7 +342,8 @@ class Agent(
         userMessage: String,
         conversationId: String,
         format: ResponseFormat = ResponseFormat.PLAIN,
-        collectionSettings: CollectionSettings? = null
+        collectionSettings: CollectionSettings? = null,
+        temperature: Float? = null
     ): ChatResponse {
         // Проверяем, изменился ли формат или настройки сбора для этого диалога
         val previousFormat = conversationFormats[conversationId]
@@ -377,7 +378,7 @@ class Agent(
         history.add(LLMMessage(role = "user", content = userMessage))
 
         // Цикл обработки tool calls (максимум 5 итераций для защиты от бесконечного цикла)
-        var currentResponse = callLLM(history, conversationId)
+        var currentResponse = callLLM(history, conversationId, temperature)
         var currentMessage = currentResponse.choices.firstOrNull()?.message
             ?: throw RuntimeException("Пустой ответ от LLM")
 
@@ -427,7 +428,7 @@ class Agent(
             }
 
             // Вызываем LLM ещё раз
-            currentResponse = callLLM(history, conversationId)
+            currentResponse = callLLM(history, conversationId, temperature)
             currentMessage = currentResponse.choices.firstOrNull()?.message
                 ?: throw RuntimeException("Пустой ответ от LLM")
         }
@@ -457,7 +458,7 @@ class Agent(
         ignoreUnknownKeys = true
     }
 
-    private suspend fun callLLM(messages: List<LLMMessage>, conversationId: String): LLMResponse {
+    private suspend fun callLLM(messages: List<LLMMessage>, conversationId: String, temperature: Float? = null): LLMResponse {
         val tools = ToolRegistry.getAllTools()
 
         // Формируем превью сообщений для логов
@@ -471,7 +472,8 @@ class Agent(
         val request = LLMRequest(
             model = model,
             messages = messages,
-            tools = tools
+            tools = tools,
+            temperature = temperature
         )
 
         // Логируем полный JSON запрос

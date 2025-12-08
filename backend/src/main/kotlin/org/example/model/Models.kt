@@ -15,7 +15,8 @@ data class ChatRequest(
     val message: String,
     val conversationId: String? = null,
     val responseFormat: ResponseFormat = ResponseFormat.PLAIN,
-    val collectionSettings: CollectionSettings? = null
+    val collectionSettings: CollectionSettings? = null,
+    val temperature: Float? = null
 )
 
 @Serializable
@@ -61,7 +62,8 @@ data class LLMRequest(
     val model: String,
     val messages: List<LLMMessage>,
     val tools: List<Tool>? = null,
-    val max_tokens: Int = 4096
+    val max_tokens: Int = 4096,
+    val temperature: Float? = null
 )
 
 @Serializable

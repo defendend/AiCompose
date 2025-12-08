@@ -46,7 +46,8 @@ data class ChatRequest(
     val message: String,
     val conversationId: String? = null,
     val responseFormat: ResponseFormat = ResponseFormat.PLAIN,
-    val collectionSettings: CollectionSettings? = null
+    val collectionSettings: CollectionSettings? = null,
+    val temperature: Float? = null
 )
 
 @Serializable

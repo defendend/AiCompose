@@ -33,6 +33,9 @@ class ChatViewModel(
     private val _collectionSettings = MutableStateFlow(CollectionSettings.DISABLED)
     val collectionSettings: StateFlow<CollectionSettings> = _collectionSettings.asStateFlow()
 
+    private val _temperature = MutableStateFlow<Float?>(null)
+    val temperature: StateFlow<Float?> = _temperature.asStateFlow()
+
     private var conversationId: String? = null
 
     fun setResponseFormat(format: ResponseFormat) {
@@ -42,7 +45,13 @@ class ChatViewModel(
 
     fun setCollectionSettings(settings: CollectionSettings) {
         _collectionSettings.value = settings
-        AppLogger.info("ChatViewModel", "Режим сбора данных: ${settings.mode}, enabled=${settings.enabled}")
+        val hasCustomPrompt = settings.customSystemPrompt.isNotBlank()
+        AppLogger.info("ChatViewModel", "Режим сбора данных: ${settings.mode}, enabled=${settings.enabled}, customSystemPrompt=${if (hasCustomPrompt) "задан (${settings.customSystemPrompt.take(30)}...)" else "пусто"}")
+    }
+
+    fun setTemperature(temp: Float?) {
+        _temperature.value = temp
+        AppLogger.info("ChatViewModel", "Temperature изменён на: ${temp ?: "default"}")
     }
 
     fun sendMessage(text: String) {
@@ -64,11 +73,15 @@ class ChatViewModel(
                 "Отправка сообщения: $text (формат: ${_responseFormat.value}, режим сбора: ${currentSettings.mode})"
             )
 
+            // Отправляем настройки если включён режим сбора ИЛИ задан кастомный системный промпт
+            val shouldSendSettings = currentSettings.enabled || currentSettings.customSystemPrompt.isNotBlank()
+
             apiClient.sendMessage(
                 text = text,
                 conversationId = conversationId,
                 responseFormat = _responseFormat.value,
-                collectionSettings = if (currentSettings.enabled) currentSettings else null
+                collectionSettings = if (shouldSendSettings) currentSettings else null,
+                temperature = _temperature.value
             )
                 .onSuccess { response ->
                     conversationId = response.conversationId

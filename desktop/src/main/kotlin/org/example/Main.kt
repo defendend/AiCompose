@@ -53,10 +53,15 @@ fun main() = application {
                 )
                 Screen.SETTINGS -> {
                     val collectionSettings by chatViewModel.collectionSettings.collectAsState()
+                    val temperature by chatViewModel.temperature.collectAsState()
                     SettingsScreen(
                         currentSettings = collectionSettings,
+                        currentTemperature = temperature,
                         onSettingsChanged = { settings ->
                             chatViewModel.setCollectionSettings(settings)
+                        },
+                        onTemperatureChanged = { temp ->
+                            chatViewModel.setTemperature(temp)
                         },
                         onBack = { currentScreen = Screen.CHAT }
                     )

@@ -38,10 +38,11 @@ class ChatApiClient(
         text: String,
         conversationId: String? = null,
         responseFormat: ResponseFormat = ResponseFormat.PLAIN,
-        collectionSettings: CollectionSettings? = null
+        collectionSettings: CollectionSettings? = null,
+        temperature: Float? = null
     ): Result<ChatResponse> {
         return try {
-            AppLogger.info("ChatApiClient", "Отправка запроса: $text (формат: $responseFormat, режим сбора: ${collectionSettings?.mode})")
+            AppLogger.info("ChatApiClient", "Отправка запроса: $text (формат: $responseFormat, режим сбора: ${collectionSettings?.mode}, temperature: $temperature)")
 
             val response = client.post("$baseUrl/api/chat") {
                 contentType(ContentType.Application.Json)
@@ -49,7 +50,8 @@ class ChatApiClient(
                     message = text,
                     conversationId = conversationId,
                     responseFormat = responseFormat,
-                    collectionSettings = collectionSettings
+                    collectionSettings = collectionSettings,
+                    temperature = temperature
                 ))
             }
 

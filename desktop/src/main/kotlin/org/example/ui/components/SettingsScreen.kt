@@ -99,10 +99,27 @@ private val agentPersonas = listOf(
     )
 )
 
+// Предустановленные температуры
+data class TemperaturePreset(
+    val value: Float?,
+    val name: String,
+    val description: String
+)
+
+private val temperaturePresets = listOf(
+    TemperaturePreset(null, "По умолчанию", "Используется стандартная температура модели"),
+    TemperaturePreset(0f, "0 — Точный", "Максимальная детерминированность, один и тот же ответ"),
+    TemperaturePreset(0.7f, "0.7 — Сбалансированный", "Баланс между точностью и креативностью"),
+    TemperaturePreset(1.2f, "1.2 — Креативный", "Больше разнообразия и неожиданных ответов"),
+    TemperaturePreset(2f, "2 — Безумный", "Максимальный хаос! Самые неожиданные и странные ответы")
+)
+
 @Composable
 fun SettingsScreen(
     currentSettings: CollectionSettings,
+    currentTemperature: Float?,
     onSettingsChanged: (CollectionSettings) -> Unit,
+    onTemperatureChanged: (Float?) -> Unit,
     onBack: () -> Unit
 ) {
     var selectedMode by remember { mutableStateOf(currentSettings.mode) }
@@ -110,6 +127,7 @@ fun SettingsScreen(
     var customResultTitle by remember { mutableStateOf(currentSettings.resultTitle.ifEmpty { "Результат" }) }
     var customSystemPrompt by remember { mutableStateOf(currentSettings.customSystemPrompt) }
     var selectedPersonaIndex by remember { mutableStateOf(0) }
+    var selectedTemperature by remember { mutableStateOf(currentTemperature) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Top Bar
@@ -195,6 +213,43 @@ fun SettingsScreen(
                         )
                     }
                 )
+            }
+
+            item {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            }
+
+            // === Секция температуры ===
+            item {
+                Text(
+                    text = "Температура (Temperature)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Влияет на креативность и разнообразие ответов модели.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                )
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    temperaturePresets.forEach { preset ->
+                        TemperatureCard(
+                            preset = preset,
+                            isSelected = selectedTemperature == preset.value,
+                            onClick = {
+                                selectedTemperature = preset.value
+                                onTemperatureChanged(preset.value)
+                            }
+                        )
+                    }
+                }
             }
 
             item {
@@ -561,6 +616,55 @@ private fun CustomModeSettings(
                 enabled = customPrompt.isNotBlank()
             ) {
                 Text("Применить")
+            }
+        }
+    }
+}
+
+@Composable
+private fun TemperatureCard(
+    preset: TemperaturePreset,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+    val backgroundColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(2.dp, borderColor, RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        color = backgroundColor
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = preset.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                           else MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = preset.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                           else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
+
+            if (isSelected) {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = "Выбрано",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
     }
