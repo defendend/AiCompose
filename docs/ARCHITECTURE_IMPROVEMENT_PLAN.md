@@ -396,30 +396,49 @@ class PluginLoader {
 
 ---
 
-## Фаза 7: Тестирование (Приоритет: ВЫСОКИЙ)
+## ✅ Фаза 7: Тестирование (ВЫПОЛНЕНО)
 
 ### Структура тестов
 
 ```
 backend/src/test/kotlin/org/example/
 ├── agent/
-│   ├── AgentTest.kt
-│   ├── PromptBuilderTest.kt
-│   └── ToolExecutorTest.kt
+│   ├── AgentTest.kt           # 14 тестов — unit тесты с моками ✅
+│   ├── PromptBuilderTest.kt   # 19 тестов — форматы, режимы, промпты ✅
+│   └── ToolExecutorTest.kt    # 8 тестов — выполнение tool calls ✅
 ├── data/
-│   ├── ConversationRepositoryTest.kt
-│   └── LLMClientTest.kt  # Mock-тесты
+│   └── ConversationRepositoryTest.kt  # 16 тестов — история, форматы, настройки ✅
 ├── api/
-│   └── RoutesTest.kt     # Integration tests
+│   └── RoutesTest.kt          # 9 тестов — интеграционные тесты API ✅
 └── tools/
-    └── HistoricalEventsToolTest.kt
+    └── ToolsTest.kt           # 24 теста — все инструменты + ToolRegistry ✅
 
-desktop/src/test/kotlin/org/example/
+desktop/src/test/kotlin/org/example/  # (TODO: будущее)
 ├── ui/
 │   └── ChatViewModelTest.kt
 └── network/
     └── ChatApiClientTest.kt
 ```
+
+### Тестовые зависимости (backend/build.gradle.kts)
+```kotlin
+testImplementation(kotlin("test"))
+testImplementation("io.ktor:ktor-server-test-host:3.0.3")
+testImplementation("io.mockk:mockk:1.13.13")
+testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+testImplementation("io.ktor:ktor-client-mock:3.0.3")
+```
+
+### Запуск тестов
+```bash
+./gradlew :backend:test           # Запуск всех тестов
+./gradlew :backend:test --info    # С подробным выводом
+```
+
+### Результат
+- ✅ **90 тестов**
+- ✅ **100% успешных**
+- ✅ Время выполнения: ~1.1 секунды
 
 ### Пример теста
 
@@ -463,8 +482,8 @@ class PromptBuilderTest {
 |-------------------------|-----------|-----------|----------------------|--------------|
 | 1. Shared модуль        | ВЫСОКИЙ   | Средняя   | Убирает дублирование | ✅ ВЫПОЛНЕНО |
 | 2. Декомпозиция Agent   | ВЫСОКИЙ   | Высокая   | Улучшает поддержку   | ✅ ВЫПОЛНЕНО |
-| 7. Тестирование         | ВЫСОКИЙ   | Средняя   | Стабильность         | ⏳ СЛЕДУЮЩИЙ |
-| 3. Dependency Injection | СРЕДНИЙ   | Низкая    | Чистый код           |              |
+| 7. Тестирование         | ВЫСОКИЙ   | Средняя   | Стабильность         | ✅ ВЫПОЛНЕНО |
+| 3. Dependency Injection | СРЕДНИЙ   | Низкая    | Чистый код           | ⏳ СЛЕДУЮЩИЙ |
 | 6. Расширяемость tools  | СРЕДНИЙ   | Средняя   | Гибкость             |              |
 | 4. Персистентность      | СРЕДНИЙ   | Средняя   | Production-ready     |              |
 | 5. UseCase слой         | НИЗКИЙ    | Низкая    | Для масштабирования  |              |
@@ -485,12 +504,23 @@ class PromptBuilderTest {
 4. ✅ Вынести `ToolExecutor`
 5. ✅ Упростить `Agent.kt` (530 → 150 строк)
 
-### ⏳ Итерация 3 (Качество) — СЛЕДУЮЩАЯ
-1. Добавить unit тесты
-2. Внедрить Koin
-3. Настроить CI с тестами
+### ✅ Итерация 3 (Тестирование) — ВЫПОЛНЕНО
+1. ✅ Добавлены тестовые зависимости (MockK, kotlinx-coroutines-test, ktor-client-mock)
+2. ✅ Unit тесты для PromptBuilder (19 тестов)
+3. ✅ Unit тесты для ConversationRepository (16 тестов)
+4. ✅ Unit тесты для ToolExecutor (8 тестов)
+5. ✅ Unit тесты для Agent с моками LLMClient (14 тестов)
+6. ✅ Интеграционные тесты для Routes (9 тестов)
+7. ✅ Unit тесты для Tools и ToolRegistry (24 теста)
+8. ✅ Исправлена версия JVM toolchain в shared модуле (21)
 
-### Итерация 4 (Production)
+**Всего: 90 тестов, 100% успешных**
+
+### ⏳ Итерация 4 (DI и CI) — СЛЕДУЮЩАЯ
+1. Внедрить Koin для DI
+2. Настроить CI с тестами
+
+### Итерация 5 (Production)
 1. Redis для conversations
 2. Улучшить error handling
 3. Добавить метрики
