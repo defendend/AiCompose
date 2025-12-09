@@ -18,15 +18,18 @@ import org.example.network.ChatApiClient
 import org.example.ui.ChatViewModel
 import org.example.ui.components.ChatScreen
 import org.example.ui.components.LogWindow
+import org.example.ui.components.ModelComparisonScreen
 import org.example.ui.components.ServerLogWindow
 import org.example.ui.components.SettingsScreen
+import org.example.ui.ModelComparisonViewModel
 import org.example.ui.theme.AppTheme
 import org.koin.compose.KoinApplication
 import org.koin.compose.koinInject
 
 enum class Screen {
     CHAT,
-    SETTINGS
+    SETTINGS,
+    MODEL_COMPARISON
 }
 
 fun main() = application {
@@ -45,6 +48,7 @@ private fun ApplicationScope.App() {
 
     val chatViewModel: ChatViewModel = koinInject()
     val apiClient: ChatApiClient = koinInject()
+    val modelComparisonViewModel = remember { ModelComparisonViewModel() }
 
     Window(
         onCloseRequest = ::exitApplication,
@@ -59,7 +63,8 @@ private fun ApplicationScope.App() {
                     chatViewModel = chatViewModel,
                     onToggleLogs = { showLogWindow = !showLogWindow },
                     onToggleServerLogs = { showServerLogWindow = !showServerLogWindow },
-                    onOpenSettings = { currentScreen = Screen.SETTINGS }
+                    onOpenSettings = { currentScreen = Screen.SETTINGS },
+                    onOpenModelComparison = { currentScreen = Screen.MODEL_COMPARISON }
                 )
                 Screen.SETTINGS -> {
                     val collectionSettings by chatViewModel.collectionSettings.collectAsState()
@@ -73,6 +78,12 @@ private fun ApplicationScope.App() {
                         onTemperatureChanged = { temp ->
                             chatViewModel.setTemperature(temp)
                         },
+                        onBack = { currentScreen = Screen.CHAT }
+                    )
+                }
+                Screen.MODEL_COMPARISON -> {
+                    ModelComparisonScreen(
+                        viewModel = modelComparisonViewModel,
                         onBack = { currentScreen = Screen.CHAT }
                     )
                 }
@@ -99,7 +110,8 @@ private fun MainContent(
     chatViewModel: ChatViewModel,
     onToggleLogs: () -> Unit,
     onToggleServerLogs: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenModelComparison: () -> Unit
 ) {
     val collectionSettings by chatViewModel.collectionSettings.collectAsState()
     var showMenu by remember { mutableStateOf(false) }
@@ -142,6 +154,16 @@ private fun MainContent(
                                     Icons.Default.Settings,
                                     contentDescription = null
                                 )
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Сравнение моделей") },
+                            onClick = {
+                                showMenu = false
+                                onOpenModelComparison()
+                            },
+                            leadingIcon = {
+                                Text("🔬")
                             }
                         )
                         HorizontalDivider()
