@@ -45,6 +45,11 @@ compose.desktop {
     application {
         mainClass = "org.example.MainKt"
 
+        // Передаём переменные окружения в JVM
+        jvmArgs += listOf(
+            "-Dhf.token=${System.getenv("HF_TOKEN") ?: ""}"
+        )
+
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "AiCompose"

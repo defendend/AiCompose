@@ -5,15 +5,18 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.flow.collect
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.example.agent.Agent
 import org.example.data.ConversationRepository
 import org.example.data.LLMClient
 import org.example.data.RedisConversationRepository
+import org.example.demo.TokenCounterDemo
 import org.example.logging.ServerLogger
 import org.example.model.LogCategory
 import org.example.model.LogLevel
+import org.example.model.LLMMessage
 import org.example.shared.model.ChatRequest
 import org.example.shared.model.ChatStreamRequest
 import org.example.shared.model.HealthCheckResponse
@@ -232,5 +235,113 @@ fun Route.chatRoutes(
             ServerLogger.clear()
             call.respond(HttpStatusCode.OK, mapOf("status" to "cleared"))
         }
+
+        // === Демонстрация подсчёта токенов ===
+
+        /**
+         * Запустить полное сравнение токенов (короткий, средний, длинный, превышающий лимит).
+         * GET /api/tokens/demo
+         */
+        get("/tokens/demo") {
+            if (llmClient == null) {
+                call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    mapOf("error" to "LLM клиент не настроен")
+                )
+                return@get
+            }
+
+            try {
+                val demo = TokenCounterDemo(llmClient)
+                val result = demo.runComparison()
+                call.respond(HttpStatusCode.OK, result)
+            } catch (e: Exception) {
+                ServerLogger.logError("Ошибка запуска демо токенов", e)
+                call.respond(
+                    HttpStatusCode.InternalServerError,
+                    mapOf("error" to (e.message ?: "Ошибка демо"))
+                )
+            }
+        }
+
+        /**
+         * Подсчитать токены для произвольного текста.
+         * POST /api/tokens/count
+         * Body: { "text": "ваш текст", "sendToApi": false }
+         */
+        post("/tokens/count") {
+            if (llmClient == null) {
+                call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    mapOf("error" to "LLM клиент не настроен")
+                )
+                return@post
+            }
+
+            try {
+                val request = call.receive<TokenCountRequest>()
+                val demo = TokenCounterDemo(llmClient)
+
+                if (request.sendToApi) {
+                    // Отправить в API для получения реального количества токенов
+                    val result = demo.runTest(
+                        testName = "custom",
+                        prompt = request.text,
+                        notes = "Пользовательский запрос"
+                    )
+                    call.respond(HttpStatusCode.OK, result)
+                } else {
+                    // Только оценка без отправки в API
+                    val estimated = demo.estimateTokens(request.text)
+                    call.respond(HttpStatusCode.OK, TokenEstimate(
+                        text = request.text.take(100) + if (request.text.length > 100) "..." else "",
+                        length = request.text.length,
+                        estimatedTokens = estimated,
+                        note = "Оценка: ~${TokenCounterDemo.AVG_CHARS_PER_TOKEN_RU} символа/токен для русского, ~${TokenCounterDemo.AVG_CHARS_PER_TOKEN_EN} для английского"
+                    ))
+                }
+            } catch (e: Exception) {
+                ServerLogger.logError("Ошибка подсчёта токенов", e)
+                call.respond(
+                    HttpStatusCode.InternalServerError,
+                    mapOf("error" to (e.message ?: "Ошибка подсчёта"))
+                )
+            }
+        }
+
+        /**
+         * Получить информацию о лимитах модели.
+         * GET /api/tokens/limits
+         */
+        get("/tokens/limits") {
+            call.respond(HttpStatusCode.OK, mapOf(
+                "model" to "deepseek-chat",
+                "maxContextTokens" to TokenCounterDemo.MAX_CONTEXT_TOKENS,
+                "maxOutputTokens" to TokenCounterDemo.MAX_OUTPUT_TOKENS,
+                "defaultMaxOutput" to TokenCounterDemo.DEFAULT_MAX_OUTPUT,
+                "avgCharsPerTokenRu" to TokenCounterDemo.AVG_CHARS_PER_TOKEN_RU,
+                "avgCharsPerTokenEn" to TokenCounterDemo.AVG_CHARS_PER_TOKEN_EN,
+                "notes" to listOf(
+                    "DeepSeek deepseek-chat поддерживает до 64K токенов контекста",
+                    "Максимум выходных токенов: 8K (по умолчанию 4K)",
+                    "Русский текст занимает больше токенов чем английский",
+                    "Системный промпт и история диалога также считаются в контекст"
+                )
+            ))
+        }
     }
 }
+
+@Serializable
+data class TokenCountRequest(
+    val text: String,
+    val sendToApi: Boolean = false
+)
+
+@Serializable
+data class TokenEstimate(
+    val text: String,
+    val length: Int,
+    val estimatedTokens: Int,
+    val note: String
+)

@@ -30,6 +30,7 @@ enum class LogCategory {
     LLM_RAW_RESPONSE, // Полный JSON ответ от DeepSeek
     TOOL_CALL,        // Вызов инструмента
     TOOL_RESULT,      // Результат инструмента
+    TOKEN_USAGE,      // Использование токенов
     SYSTEM            // Системные события
 }
 
@@ -47,7 +48,11 @@ data class LogDetails(
     val error: String? = null,
     val conversationId: String? = null,
     val model: String? = null,
-    val tokensUsed: Int? = null
+    val tokensUsed: Int? = null,
+    // Детальная информация о токенах
+    val promptTokens: Int? = null,
+    val completionTokens: Int? = null,
+    val totalTokens: Int? = null
 )
 
 @Serializable

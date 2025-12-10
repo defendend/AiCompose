@@ -64,7 +64,8 @@ data class PropertyDefinition(
 @Serializable
 data class LLMResponse(
     val id: String? = null,
-    val choices: List<Choice>
+    val choices: List<Choice>,
+    val usage: Usage? = null
 )
 
 @Serializable

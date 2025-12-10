@@ -160,6 +160,18 @@ class DeepSeekClient(
 
             ServerLogger.logLLMResponse(model, hasToolCalls, content, duration, conversationId)
 
+            // Логируем использование токенов
+            llmResponse.usage?.let { usage ->
+                ServerLogger.logTokenUsage(
+                    promptTokens = usage.prompt_tokens,
+                    completionTokens = usage.completion_tokens,
+                    totalTokens = usage.total_tokens,
+                    model = model,
+                    conversationId = conversationId,
+                    durationMs = duration
+                )
+            }
+
             return llmResponse
 
         } catch (e: HttpRequestTimeoutException) {

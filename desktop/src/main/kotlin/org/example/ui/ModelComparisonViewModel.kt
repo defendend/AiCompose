@@ -4,6 +4,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.example.demo.HuggingFaceTokenDemo
 import org.example.logging.AppLogger
 import org.example.model.*
 import org.example.network.HuggingFaceApiClient
@@ -13,9 +14,11 @@ import org.example.network.HuggingFaceApiClient
  */
 class ModelComparisonViewModel(
     apiToken: String? = System.getenv("HF_TOKEN")
+        ?: System.getProperty("hf.token")?.takeIf { it.isNotBlank() }
 ) {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val apiClient = HuggingFaceApiClient(apiToken)
+    private val tokenDemo = HuggingFaceTokenDemo(apiClient)
 
     val hasApiToken: Boolean = apiToken != null
 
@@ -27,6 +30,10 @@ class ModelComparisonViewModel(
 
     private val _prompt = MutableStateFlow("Объясни что такое рекурсия простыми словами.")
     val prompt: StateFlow<String> = _prompt.asStateFlow()
+
+    // Состояние для демо токенов
+    private val _tokenDemoState = MutableStateFlow(TokenDemoState())
+    val tokenDemoState: StateFlow<TokenDemoState> = _tokenDemoState.asStateFlow()
 
     fun setPrompt(newPrompt: String) {
         _prompt.value = newPrompt
@@ -143,4 +150,67 @@ class ModelComparisonViewModel(
         scope.cancel()
         apiClient.close()
     }
+
+    // === Демо сравнения токенов ===
+
+    /**
+     * Запустить демо сравнения токенов для выбранных моделей.
+     */
+    fun runTokenDemo(includeOverLimit: Boolean = false) {
+        val modelsToTest = _selectedModels.value.toList().ifEmpty {
+            // Если ничего не выбрано, берём ВСЕ доступные модели
+            AvailableModels.allModels
+        }
+
+        val testTypes = buildList {
+            add(HuggingFaceTokenDemo.TestType.SHORT)
+            add(HuggingFaceTokenDemo.TestType.MEDIUM)
+            add(HuggingFaceTokenDemo.TestType.LONG)
+            if (includeOverLimit) {
+                add(HuggingFaceTokenDemo.TestType.VERY_LONG)
+                add(HuggingFaceTokenDemo.TestType.OVER_LIMIT)
+            }
+        }
+
+        _tokenDemoState.value = TokenDemoState(isRunning = true, progress = "Запуск тестов...")
+
+        scope.launch {
+            try {
+                AppLogger.info("TokenDemo", "Запуск демо для ${modelsToTest.size} моделей, ${testTypes.size} тестов")
+
+                val summary = tokenDemo.runComparison(modelsToTest, testTypes)
+                val formattedResults = tokenDemo.formatResults(summary)
+
+                _tokenDemoState.value = TokenDemoState(
+                    isRunning = false,
+                    results = summary,
+                    formattedOutput = formattedResults
+                )
+
+                AppLogger.info("TokenDemo", "Демо завершено. Стоимость: $${summary.totalCost}")
+
+            } catch (e: Exception) {
+                AppLogger.error("TokenDemo", "Ошибка демо: ${e.message}")
+                _tokenDemoState.value = TokenDemoState(
+                    isRunning = false,
+                    error = e.message ?: "Неизвестная ошибка"
+                )
+            }
+        }
+    }
+
+    fun clearTokenDemo() {
+        _tokenDemoState.value = TokenDemoState()
+    }
 }
+
+/**
+ * Состояние демо сравнения токенов.
+ */
+data class TokenDemoState(
+    val isRunning: Boolean = false,
+    val progress: String = "",
+    val results: HuggingFaceTokenDemo.TokenComparisonSummary? = null,
+    val formattedOutput: String = "",
+    val error: String? = null
+)

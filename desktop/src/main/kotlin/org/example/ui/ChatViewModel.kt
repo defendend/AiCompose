@@ -229,6 +229,13 @@ class ChatViewModel(
                             "Агент вызвал инструмент: ${toolCall.name}"
                         )
                     }
+
+                    response.tokenUsage?.let { usage ->
+                        AppLogger.info(
+                            "ChatViewModel",
+                            "Токены: ${usage.toDetailedString()}"
+                        )
+                    }
                 }
                 .onFailure { e ->
                     AppLogger.error("ChatViewModel", "Ошибка: ${e.message}")

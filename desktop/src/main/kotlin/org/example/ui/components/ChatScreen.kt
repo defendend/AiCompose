@@ -351,6 +351,65 @@ private fun MessageBubble(message: ChatMessage) {
                     }
                 }
             }
+
+            // Отображение информации о токенах (только для ассистента)
+            if (!isUser && message.tokenUsage != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                TokenUsageInfo(message.tokenUsage!!)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TokenUsageInfo(tokenUsage: org.example.shared.model.TokenUsage) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        shape = RoundedCornerShape(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Токены
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "🔢",
+                    style = MaterialTheme.typography.labelSmall
+                )
+                Text(
+                    text = "${tokenUsage.totalTokens}",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "(${tokenUsage.promptTokens}→${tokenUsage.completionTokens})",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+
+            // Стоимость
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "💰",
+                    style = MaterialTheme.typography.labelSmall
+                )
+                Text(
+                    text = tokenUsage.formatCost(),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
         }
     }
 }

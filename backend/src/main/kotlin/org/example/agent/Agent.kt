@@ -17,6 +17,7 @@ import org.example.shared.model.MessageRole
 import org.example.shared.model.ResponseFormat
 import org.example.shared.model.StreamEvent
 import org.example.shared.model.StreamEventType
+import org.example.shared.model.TokenUsage
 import org.example.shared.model.ToolCall
 import org.example.tools.core.ToolRegistry
 import java.util.UUID
@@ -86,11 +87,18 @@ class Agent(
 
         // Цикл обработки tool calls
         var firstToolCall: LLMToolCall? = null
-        val response = processToolCallLoop(conversationId, temperature) { toolCall ->
-            if (firstToolCall == null) {
-                firstToolCall = toolCall
+        var totalUsage: TokenUsage? = null
+
+        val response = processToolCallLoop(conversationId, temperature,
+            onToolCall = { toolCall ->
+                if (firstToolCall == null) {
+                    firstToolCall = toolCall
+                }
+            },
+            onUsage = { usage ->
+                totalUsage = totalUsage?.let { it + usage } ?: usage
             }
-        }
+        )
 
         // Добавляем финальное сообщение в историю
         conversationRepository.addMessage(conversationId, response)
@@ -107,9 +115,11 @@ class Agent(
                         name = tc.function.name,
                         arguments = tc.function.arguments
                     )
-                }
+                },
+                tokenUsage = totalUsage
             ),
-            conversationId = conversationId
+            conversationId = conversationId,
+            tokenUsage = totalUsage
         )
     }
 
@@ -119,7 +129,8 @@ class Agent(
     private suspend fun processToolCallLoop(
         conversationId: String,
         temperature: Float?,
-        onToolCall: (LLMToolCall) -> Unit
+        onToolCall: (LLMToolCall) -> Unit,
+        onUsage: (TokenUsage) -> Unit
     ): LLMMessage {
         val tools = ToolRegistry.getAllTools()
         var iterations = 0
@@ -127,6 +138,12 @@ class Agent(
         // Получаем историю для вызова LLM
         var history = conversationRepository.getHistory(conversationId)
         var currentResponse = llmClient.chat(history, tools, temperature, conversationId)
+
+        // Собираем usage
+        currentResponse.usage?.let { usage ->
+            onUsage(TokenUsage.fromUsage(usage.prompt_tokens, usage.completion_tokens))
+        }
+
         var currentMessage = currentResponse.choices.firstOrNull()?.message
             ?: throw RuntimeException("Пустой ответ от LLM")
 
@@ -147,6 +164,12 @@ class Agent(
             // Получаем обновлённую историю и вызываем LLM снова
             history = conversationRepository.getHistory(conversationId)
             currentResponse = llmClient.chat(history, tools, temperature, conversationId)
+
+            // Собираем usage
+            currentResponse.usage?.let { usage ->
+                onUsage(TokenUsage.fromUsage(usage.prompt_tokens, usage.completion_tokens))
+            }
+
             currentMessage = currentResponse.choices.firstOrNull()?.message
                 ?: throw RuntimeException("Пустой ответ от LLM")
         }

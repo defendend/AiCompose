@@ -19,6 +19,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.example.model.*
 import org.example.ui.ModelComparisonViewModel
+import org.example.ui.TokenDemoState
 
 @Composable
 fun ModelComparisonScreen(
@@ -28,6 +29,7 @@ fun ModelComparisonScreen(
     val state by viewModel.state.collectAsState()
     val selectedModels by viewModel.selectedModels.collectAsState()
     val prompt by viewModel.prompt.collectAsState()
+    val tokenDemoState by viewModel.tokenDemoState.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Предупреждение об отсутствии токена
@@ -115,6 +117,16 @@ fun ModelComparisonScreen(
                     onRun = { viewModel.runComparison() },
                     isRunning = state.isRunning,
                     canRun = selectedModels.isNotEmpty() && prompt.isNotBlank()
+                )
+            }
+
+            // Секция демо токенов
+            item {
+                TokenDemoSection(
+                    tokenDemoState = tokenDemoState,
+                    onRunDemo = { includeOverLimit -> viewModel.runTokenDemo(includeOverLimit) },
+                    onClear = { viewModel.clearTokenDemo() },
+                    hasApiToken = viewModel.hasApiToken
                 )
             }
 
@@ -635,6 +647,408 @@ private fun MetricBadge(
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+}
+
+// === Секция демо сравнения токенов ===
+
+@Composable
+private fun TokenDemoSection(
+    tokenDemoState: TokenDemoState,
+    onRunDemo: (Boolean) -> Unit,
+    onClear: () -> Unit,
+    hasApiToken: Boolean
+) {
+    var includeOverLimit by remember { mutableStateOf(false) }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "🔬", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Демо: Сравнение токенов",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (tokenDemoState.results != null) {
+                    TextButton(onClick = onClear) {
+                        Text("Очистить")
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Сравните поведение моделей с разными размерами запросов: короткий (~20 токенов), средний (~200), длинный (~2000) и превышающий лимит.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Опция включения теста на превышение лимита
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clickable { includeOverLimit = !includeOverLimit }
+            ) {
+                Checkbox(
+                    checked = includeOverLimit,
+                    onCheckedChange = { includeOverLimit = it }
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Включить тест на превышение лимита (долго!)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(
+                    onClick = { onRunDemo(includeOverLimit) },
+                    enabled = hasApiToken && !tokenDemoState.isRunning
+                ) {
+                    if (tokenDemoState.isRunning) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(tokenDemoState.progress.ifEmpty { "Тестирование..." })
+                    } else {
+                        Icon(Icons.Default.Science, null, Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Запустить демо")
+                    }
+                }
+            }
+
+            // Ошибка
+            tokenDemoState.error?.let { error ->
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = "Ошибка: $error",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            }
+
+            // Результаты
+            tokenDemoState.results?.let { summary ->
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Сводка
+                TokenDemoSummaryCard(summary)
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Результаты по моделям
+                summary.modelResults.forEach { (model, results) ->
+                    TokenDemoModelCard(model, results)
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TokenDemoSummaryCard(summary: org.example.demo.HuggingFaceTokenDemo.TokenComparisonSummary) {
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer,
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "📊 Анализ поведения моделей",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            summary.insights.forEach { insight ->
+                val textColor = when {
+                    insight.startsWith("═══") -> MaterialTheme.colorScheme.primary
+                    insight.startsWith("📊") || insight.startsWith("🥇") || insight.startsWith("🐢") -> MaterialTheme.colorScheme.onPrimaryContainer
+                    insight.contains("✅") -> Color(0xFF2E7D32)  // Более тёмный зелёный
+                    insight.contains("⚠️") || insight.contains("❌") -> MaterialTheme.colorScheme.error
+                    else -> MaterialTheme.colorScheme.onPrimaryContainer
+                }
+
+                val fontWeight = if (insight.startsWith("═══") || insight.startsWith("📊")) FontWeight.Bold else FontWeight.Normal
+                val textStyle = if (insight.startsWith("═══")) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium
+
+                if (insight.isNotBlank()) {
+                    Text(
+                        text = insight,
+                        style = textStyle,
+                        fontWeight = fontWeight,
+                        color = textColor
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TokenDemoModelCard(
+    model: HuggingFaceModel,
+    results: List<org.example.demo.HuggingFaceTokenDemo.TokenTestResult>
+) {
+    var isExpanded by remember { mutableStateOf(true) }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { isExpanded = !isExpanded },
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            // Заголовок модели
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = model.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            text = model.parameters,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                }
+                Icon(
+                    if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (isExpanded) {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Таблица результатов
+                results.forEach { result ->
+                    TokenTestResultRow(result)
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TokenTestResultRow(result: org.example.demo.HuggingFaceTokenDemo.TokenTestResult) {
+    var showResponse by remember { mutableStateOf(false) }
+
+    val bgColor = if (result.success) {
+        MaterialTheme.colorScheme.surface
+    } else {
+        MaterialTheme.colorScheme.errorContainer
+    }
+
+    Surface(
+        color = bgColor,
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            // Основная строка с метриками
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { if (result.success) showResponse = !showResponse },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Тип теста
+                Column(modifier = Modifier.weight(0.2f)) {
+                    Text(
+                        text = result.testType.label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (result.success) MaterialTheme.colorScheme.onSurface
+                               else MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Text(
+                        text = result.testType.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (result.success) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                               else MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
+                    )
+                }
+
+                if (result.success) {
+                    // Токены
+                    Column(
+                        modifier = Modifier.weight(0.22f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "${result.actualPromptTokens}→${result.actualCompletionTokens}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "токенов",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+
+                    // Время
+                    Column(
+                        modifier = Modifier.weight(0.18f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "${result.responseTimeMs}ms",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (result.responseTimeMs < 2000)
+                                Color(0xFF2E7D32) else Color(0xFFE65100)
+                        )
+                        Text(
+                            text = "время",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+
+                    // Скорость
+                    Column(
+                        modifier = Modifier.weight(0.18f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = result.tokensPerSecond?.let { "${"%.0f".format(it)}/с" } ?: "—",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                        Text(
+                            text = "скорость",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+
+                    // Стоимость
+                    Column(
+                        modifier = Modifier.weight(0.18f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = result.cost?.let {
+                                if (it < 0.0001) "$%.7f".format(it)
+                                else "$%.5f".format(it)
+                            } ?: "FREE",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "стоимость",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+
+                    // Стрелка раскрытия
+                    Icon(
+                        if (showResponse) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                } else {
+                    // Ошибка
+                    Column(modifier = Modifier.weight(0.65f)) {
+                        Text(
+                            text = "❌ ${result.error?.take(80) ?: "Ошибка"}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            maxLines = 2
+                        )
+                    }
+                }
+            }
+
+            // Ответ модели (раскрывается по клику)
+            if (showResponse && result.success && result.fullResponse != null) {
+                Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "💬 Ответ модели:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        text = result.fullResponse,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(10.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }

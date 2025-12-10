@@ -9,5 +9,6 @@ data class ChatMessage(
     val content: String,
     val timestamp: Long,
     val toolCall: ToolCall? = null,
-    val toolResult: ToolResult? = null
+    val toolResult: ToolResult? = null,
+    val tokenUsage: TokenUsage? = null
 )

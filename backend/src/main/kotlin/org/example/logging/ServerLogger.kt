@@ -174,6 +174,34 @@ object ServerLogger {
         logger.info("[TOOL_RESULT] $toolName -> $result (${durationMs}ms)")
     }
 
+    /**
+     * Логирование использования токенов.
+     */
+    fun logTokenUsage(
+        promptTokens: Int,
+        completionTokens: Int,
+        totalTokens: Int,
+        model: String,
+        conversationId: String?,
+        durationMs: Long? = null
+    ) {
+        val entry = ServerLogEntry(
+            level = LogLevel.INFO,
+            category = LogCategory.TOKEN_USAGE,
+            message = "Токены: $promptTokens (вход) + $completionTokens (выход) = $totalTokens",
+            details = LogDetails(
+                promptTokens = promptTokens,
+                completionTokens = completionTokens,
+                totalTokens = totalTokens,
+                model = model,
+                conversationId = conversationId,
+                durationMs = durationMs
+            )
+        )
+        addLog(entry)
+        logger.info("[TOKEN_USAGE] prompt=$promptTokens, completion=$completionTokens, total=$totalTokens")
+    }
+
     fun logError(
         message: String,
         error: Throwable?,
