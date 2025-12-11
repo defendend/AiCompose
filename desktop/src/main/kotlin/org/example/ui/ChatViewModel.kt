@@ -13,6 +13,7 @@ import org.example.logging.AppLogger
 import org.example.network.ChatApiClient
 import org.example.shared.model.ChatMessage
 import org.example.shared.model.CollectionSettings
+import org.example.shared.model.CompressionSettings
 import org.example.shared.model.MessageRole
 import org.example.shared.model.ResponseFormat
 import org.example.shared.model.StreamEventType
@@ -50,6 +51,9 @@ class ChatViewModel(
     private val _temperature = MutableStateFlow<Float?>(null)
     val temperature: StateFlow<Float?> = _temperature.asStateFlow()
 
+    private val _compressionSettings = MutableStateFlow<CompressionSettings?>(null)
+    val compressionSettings: StateFlow<CompressionSettings?> = _compressionSettings.asStateFlow()
+
     private var conversationId: String? = null
 
     fun setResponseFormat(format: ResponseFormat) {
@@ -66,6 +70,11 @@ class ChatViewModel(
     fun setTemperature(temp: Float?) {
         _temperature.value = temp
         AppLogger.info("ChatViewModel", "Temperature изменён на: ${temp ?: "default"}")
+    }
+
+    fun setCompressionSettings(settings: CompressionSettings?) {
+        _compressionSettings.value = settings
+        AppLogger.info("ChatViewModel", "Compression: ${settings?.enabled ?: "выключено"}, threshold=${settings?.messageThreshold}")
     }
 
     fun setUseStreaming(enabled: Boolean) {
@@ -217,7 +226,8 @@ class ChatViewModel(
                 conversationId = conversationId,
                 responseFormat = _responseFormat.value,
                 collectionSettings = if (shouldSendSettings) currentSettings else null,
-                temperature = _temperature.value
+                temperature = _temperature.value,
+                compressionSettings = _compressionSettings.value
             )
                 .onSuccess { response ->
                     conversationId = response.conversationId
@@ -234,6 +244,13 @@ class ChatViewModel(
                         AppLogger.info(
                             "ChatViewModel",
                             "Токены: ${usage.toDetailedString()}"
+                        )
+                    }
+
+                    response.compressionStats?.let { stats ->
+                        AppLogger.info(
+                            "ChatViewModel",
+                            "Сжатие: сохранено ~${stats.totalTokensSaved} токенов, сжатий: ${stats.totalCompressions}"
                         )
                     }
                 }

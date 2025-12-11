@@ -9,6 +9,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.example.model.LLMMessage
 import org.example.shared.model.CollectionSettings
+import org.example.shared.model.CompressionSettings
 import org.example.shared.model.ResponseFormat
 import org.slf4j.LoggerFactory
 
@@ -42,6 +43,7 @@ class RedisConversationRepository(
     private fun messagesKey(conversationId: String) = "conv:$conversationId:messages"
     private fun formatKey(conversationId: String) = "conv:$conversationId:format"
     private fun settingsKey(conversationId: String) = "conv:$conversationId:settings"
+    private fun compressionKey(conversationId: String) = "conv:$conversationId:compression"
 
     override fun getHistory(conversationId: String): List<LLMMessage> = runBlocking {
         try {
@@ -160,6 +162,49 @@ class RedisConversationRepository(
             } catch (e: Exception) {
                 logger.error("Failed to set collection settings for conversation $conversationId", e)
             }
+        }
+    }
+
+    override fun getCompressionSettings(conversationId: String): CompressionSettings? = runBlocking {
+        try {
+            val data = commands.get(compressionKey(conversationId)).await()
+            data?.let { json.decodeFromString<CompressionSettings>(it) }
+        } catch (e: Exception) {
+            logger.error("Failed to get compression settings for conversation $conversationId", e)
+            null
+        }
+    }
+
+    override fun setCompressionSettings(conversationId: String, settings: CompressionSettings) {
+        runBlocking {
+            try {
+                val data = json.encodeToString(settings)
+                commands.setex(compressionKey(conversationId), ttlSeconds, data).await()
+            } catch (e: Exception) {
+                logger.error("Failed to set compression settings for conversation $conversationId", e)
+            }
+        }
+    }
+
+    override fun replaceHistory(conversationId: String, newHistory: List<LLMMessage>) {
+        runBlocking {
+            try {
+                val key = messagesKey(conversationId)
+                val data = json.encodeToString(newHistory)
+                commands.setex(key, ttlSeconds, data).await()
+                logger.debug("Replaced history for conversation $conversationId, new size: ${newHistory.size}")
+            } catch (e: Exception) {
+                logger.error("Failed to replace history for conversation $conversationId", e)
+            }
+        }
+    }
+
+    override fun getMessageCount(conversationId: String): Int = runBlocking {
+        try {
+            getHistory(conversationId).size
+        } catch (e: Exception) {
+            logger.error("Failed to get message count for conversation $conversationId", e)
+            0
         }
     }
 

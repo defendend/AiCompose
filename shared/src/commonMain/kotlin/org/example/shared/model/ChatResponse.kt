@@ -6,5 +6,6 @@ import kotlinx.serialization.Serializable
 data class ChatResponse(
     val message: ChatMessage,
     val conversationId: String,
-    val tokenUsage: TokenUsage? = null
+    val tokenUsage: TokenUsage? = null,
+    val compressionStats: CompressionStats? = null
 )

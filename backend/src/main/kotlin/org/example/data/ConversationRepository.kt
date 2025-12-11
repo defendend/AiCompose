@@ -2,6 +2,7 @@ package org.example.data
 
 import org.example.model.LLMMessage
 import org.example.shared.model.CollectionSettings
+import org.example.shared.model.CompressionSettings
 import org.example.shared.model.ResponseFormat
 import java.util.concurrent.ConcurrentHashMap
 
@@ -22,6 +23,12 @@ interface ConversationRepository {
 
     fun getCollectionSettings(conversationId: String): CollectionSettings?
     fun setCollectionSettings(conversationId: String, settings: CollectionSettings)
+
+    // Методы для сжатия истории
+    fun getCompressionSettings(conversationId: String): CompressionSettings?
+    fun setCompressionSettings(conversationId: String, settings: CompressionSettings)
+    fun replaceHistory(conversationId: String, newHistory: List<LLMMessage>)
+    fun getMessageCount(conversationId: String): Int
 }
 
 /**
@@ -32,6 +39,7 @@ class InMemoryConversationRepository : ConversationRepository {
     private val conversations = ConcurrentHashMap<String, MutableList<LLMMessage>>()
     private val formats = ConcurrentHashMap<String, ResponseFormat>()
     private val collectionSettings = ConcurrentHashMap<String, CollectionSettings>()
+    private val compressionSettings = ConcurrentHashMap<String, CompressionSettings>()
     private val locks = ConcurrentHashMap<String, Any>()
 
     private fun getLock(conversationId: String): Any = locks.getOrPut(conversationId) { Any() }
@@ -96,5 +104,27 @@ class InMemoryConversationRepository : ConversationRepository {
 
     override fun setCollectionSettings(conversationId: String, settings: CollectionSettings) {
         collectionSettings[conversationId] = settings
+    }
+
+    override fun getCompressionSettings(conversationId: String): CompressionSettings? {
+        return compressionSettings[conversationId]
+    }
+
+    override fun setCompressionSettings(conversationId: String, settings: CompressionSettings) {
+        compressionSettings[conversationId] = settings
+    }
+
+    override fun replaceHistory(conversationId: String, newHistory: List<LLMMessage>) {
+        val lock = getLock(conversationId)
+        synchronized(lock) {
+            conversations[conversationId] = newHistory.toMutableList()
+        }
+    }
+
+    override fun getMessageCount(conversationId: String): Int {
+        val lock = getLock(conversationId)
+        synchronized(lock) {
+            return conversations[conversationId]?.size ?: 0
+        }
     }
 }

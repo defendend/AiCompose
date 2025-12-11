@@ -21,6 +21,7 @@ import org.example.model.CollectionModeTemplate
 import org.example.model.CollectionModeTemplates
 import org.example.shared.model.CollectionMode
 import org.example.shared.model.CollectionSettings
+import org.example.shared.model.CompressionSettings
 
 // Предустановленные персонажи агента
 data class AgentPersona(
@@ -118,8 +119,10 @@ private val temperaturePresets = listOf(
 fun SettingsScreen(
     currentSettings: CollectionSettings,
     currentTemperature: Float?,
+    currentCompressionSettings: CompressionSettings?,
     onSettingsChanged: (CollectionSettings) -> Unit,
     onTemperatureChanged: (Float?) -> Unit,
+    onCompressionSettingsChanged: (CompressionSettings?) -> Unit,
     onBack: () -> Unit
 ) {
     var selectedMode by remember { mutableStateOf(currentSettings.mode) }
@@ -128,6 +131,11 @@ fun SettingsScreen(
     var customSystemPrompt by remember { mutableStateOf(currentSettings.customSystemPrompt) }
     var selectedPersonaIndex by remember { mutableStateOf(0) }
     var selectedTemperature by remember { mutableStateOf(currentTemperature) }
+
+    // Настройки сжатия
+    var compressionEnabled by remember { mutableStateOf(currentCompressionSettings?.enabled ?: false) }
+    var compressionThreshold by remember { mutableStateOf(currentCompressionSettings?.messageThreshold ?: 10) }
+    var keepRecentMessages by remember { mutableStateOf(currentCompressionSettings?.keepRecentMessages ?: 4) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Top Bar
@@ -250,6 +258,68 @@ fun SettingsScreen(
                         )
                     }
                 }
+            }
+
+            item {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            }
+
+            // === Секция сжатия истории ===
+            item {
+                Text(
+                    text = "Сжатие истории диалога",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Автоматически сжимает длинные диалоги, заменяя старые сообщения на краткое резюме. Экономит токены.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                )
+            }
+
+            item {
+                CompressionSettingsCard(
+                    enabled = compressionEnabled,
+                    threshold = compressionThreshold,
+                    keepRecent = keepRecentMessages,
+                    onEnabledChanged = { enabled ->
+                        compressionEnabled = enabled
+                        if (enabled) {
+                            onCompressionSettingsChanged(CompressionSettings(
+                                enabled = true,
+                                messageThreshold = compressionThreshold,
+                                keepRecentMessages = keepRecentMessages
+                            ))
+                        } else {
+                            onCompressionSettingsChanged(null)
+                        }
+                    },
+                    onThresholdChanged = { threshold ->
+                        compressionThreshold = threshold
+                        if (compressionEnabled) {
+                            onCompressionSettingsChanged(CompressionSettings(
+                                enabled = true,
+                                messageThreshold = threshold,
+                                keepRecentMessages = keepRecentMessages
+                            ))
+                        }
+                    },
+                    onKeepRecentChanged = { keepRecent ->
+                        keepRecentMessages = keepRecent
+                        if (compressionEnabled) {
+                            onCompressionSettingsChanged(CompressionSettings(
+                                enabled = true,
+                                messageThreshold = compressionThreshold,
+                                keepRecentMessages = keepRecent
+                            ))
+                        }
+                    }
+                )
             }
 
             item {
@@ -664,6 +734,97 @@ private fun TemperatureCard(
                     contentDescription = "Выбрано",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompressionSettingsCard(
+    enabled: Boolean,
+    threshold: Int,
+    keepRecent: Int,
+    onEnabledChanged: (Boolean) -> Unit,
+    onThresholdChanged: (Int) -> Unit,
+    onKeepRecentChanged: (Int) -> Unit
+) {
+    val borderColor = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+    val backgroundColor = if (enabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(2.dp, borderColor, RoundedCornerShape(12.dp)),
+        color = backgroundColor
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Сжатие истории",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (enabled) MaterialTheme.colorScheme.onPrimaryContainer
+                               else MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = if (enabled) "Каждые $threshold сообщений создаётся резюме"
+                               else "Выключено",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (enabled) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                               else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = onEnabledChanged
+                )
+            }
+
+            if (enabled) {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Порог сообщений
+                Text(
+                    text = "Порог сжатия: $threshold сообщений",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Slider(
+                    value = threshold.toFloat(),
+                    onValueChange = { onThresholdChanged(it.toInt()) },
+                    valueRange = 6f..20f,
+                    steps = 13
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Количество последних сообщений
+                Text(
+                    text = "Оставлять последних: $keepRecent сообщений",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Slider(
+                    value = keepRecent.toFloat(),
+                    onValueChange = { onKeepRecentChanged(it.toInt()) },
+                    valueRange = 2f..8f,
+                    steps = 5
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "При достижении $threshold сообщений, старые заменяются резюме, последние $keepRecent остаются.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                 )
             }
         }

@@ -13,6 +13,8 @@ import org.example.model.FunctionCall
 import org.example.shared.model.ChatMessage
 import org.example.shared.model.ChatResponse
 import org.example.shared.model.CollectionSettings
+import org.example.shared.model.CompressionSettings
+import org.example.shared.model.CompressionStats
 import org.example.shared.model.MessageRole
 import org.example.shared.model.ResponseFormat
 import org.example.shared.model.StreamEvent
@@ -21,6 +23,7 @@ import org.example.shared.model.TokenUsage
 import org.example.shared.model.ToolCall
 import org.example.tools.core.ToolRegistry
 import java.util.UUID
+import org.example.shared.model.CompressionResult as SharedCompressionResult
 
 /**
  * AI Агент — оркестратор взаимодействия с LLM.
@@ -36,7 +39,8 @@ class Agent(
     private val conversationRepository: ConversationRepository = InMemoryConversationRepository(),
     private val promptBuilder: PromptBuilder = PromptBuilder(),
     private val toolExecutor: ToolExecutor = ToolExecutor(),
-    private val maxToolIterations: Int = MAX_TOOL_ITERATIONS_DEFAULT
+    private val maxToolIterations: Int = MAX_TOOL_ITERATIONS_DEFAULT,
+    private var historyCompressor: HistoryCompressor? = null
 ) {
     /**
      * Удобный конструктор для обратной совместимости.
@@ -58,7 +62,8 @@ class Agent(
         conversationId: String,
         format: ResponseFormat = ResponseFormat.PLAIN,
         collectionSettings: CollectionSettings? = null,
-        temperature: Float? = null
+        temperature: Float? = null,
+        compressionSettings: CompressionSettings? = null
     ): ChatResponse {
         // Проверяем, изменился ли формат или настройки
         val previousFormat = conversationRepository.getFormat(conversationId)
@@ -68,6 +73,24 @@ class Agent(
         // Сохраняем текущие настройки
         conversationRepository.setFormat(conversationId, format)
         collectionSettings?.let { conversationRepository.setCollectionSettings(conversationId, it) }
+
+        // Настраиваем сжатие если указано
+        var compressionResult: HistoryCompressor.CompressionResult? = null
+        compressionSettings?.let { settings ->
+            conversationRepository.setCompressionSettings(conversationId, settings)
+
+            // Инициализируем компрессор если нужно
+            if (settings.enabled && historyCompressor == null) {
+                historyCompressor = HistoryCompressor(
+                    llmClient,
+                    HistoryCompressor.CompressionConfig(
+                        enabled = settings.enabled,
+                        messageThreshold = settings.messageThreshold,
+                        keepRecentMessages = settings.keepRecentMessages
+                    )
+                )
+            }
+        }
 
         // Строим системный промпт
         val systemPrompt = promptBuilder.buildSystemPrompt(format, collectionSettings)
@@ -84,6 +107,28 @@ class Agent(
 
         // Добавляем сообщение пользователя
         conversationRepository.addMessage(conversationId, LLMMessage(role = "user", content = userMessage))
+
+        // Проверяем, нужно ли сжатие ПЕРЕД вызовом LLM
+        val currentSettings = conversationRepository.getCompressionSettings(conversationId)
+        if (currentSettings?.enabled == true) {
+            val compressor = historyCompressor ?: HistoryCompressor(
+                llmClient,
+                HistoryCompressor.CompressionConfig(
+                    enabled = true,
+                    messageThreshold = currentSettings.messageThreshold,
+                    keepRecentMessages = currentSettings.keepRecentMessages
+                )
+            ).also { historyCompressor = it }
+
+            val history = conversationRepository.getHistory(conversationId)
+            if (compressor.needsCompression(history)) {
+                val (compressedHistory, result) = compressor.compress(history, conversationId)
+                if (result.compressed) {
+                    conversationRepository.replaceHistory(conversationId, compressedHistory)
+                    compressionResult = result
+                }
+            }
+        }
 
         // Цикл обработки tool calls
         var firstToolCall: LLMToolCall? = null
@@ -103,6 +148,23 @@ class Agent(
         // Добавляем финальное сообщение в историю
         conversationRepository.addMessage(conversationId, response)
 
+        // Собираем статистику сжатия
+        val compressionStats = compressionResult?.let { result ->
+            val stats = historyCompressor?.getStats(conversationId)
+            CompressionStats(
+                totalCompressions = stats?.totalCompressions ?: 1,
+                totalTokensSaved = stats?.totalTokensSaved ?: result.estimatedTokensSaved,
+                currentSummary = result.summary,
+                lastCompressionResult = SharedCompressionResult(
+                    compressed = result.compressed,
+                    originalMessageCount = result.originalMessageCount,
+                    compressedMessageCount = result.compressedMessageCount,
+                    summary = result.summary,
+                    estimatedTokensSaved = result.estimatedTokensSaved
+                )
+            )
+        }
+
         return ChatResponse(
             message = ChatMessage(
                 id = UUID.randomUUID().toString(),
@@ -119,7 +181,8 @@ class Agent(
                 tokenUsage = totalUsage
             ),
             conversationId = conversationId,
-            tokenUsage = totalUsage
+            tokenUsage = totalUsage,
+            compressionStats = compressionStats
         )
     }
 

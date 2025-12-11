@@ -22,6 +22,7 @@ import org.example.shared.model.ChatRequest
 import org.example.shared.model.ChatResponse
 import org.example.shared.model.ChatStreamRequest
 import org.example.shared.model.CollectionSettings
+import org.example.shared.model.CompressionSettings
 import org.example.shared.model.HealthCheckResponse
 import org.example.shared.model.ResponseFormat
 import org.example.shared.model.StreamEvent
@@ -51,10 +52,11 @@ class ChatApiClient(
         conversationId: String? = null,
         responseFormat: ResponseFormat = ResponseFormat.PLAIN,
         collectionSettings: CollectionSettings? = null,
-        temperature: Float? = null
+        temperature: Float? = null,
+        compressionSettings: CompressionSettings? = null
     ): Result<ChatResponse> {
         return try {
-            AppLogger.info("ChatApiClient", "Отправка запроса: $text (формат: $responseFormat, режим сбора: ${collectionSettings?.mode}, temperature: $temperature)")
+            AppLogger.info("ChatApiClient", "Отправка запроса: $text (формат: $responseFormat, режим сбора: ${collectionSettings?.mode}, temperature: $temperature, compression: ${compressionSettings?.enabled})")
 
             val response = client.post("$baseUrl/api/chat") {
                 contentType(ContentType.Application.Json)
@@ -63,7 +65,8 @@ class ChatApiClient(
                     conversationId = conversationId,
                     responseFormat = responseFormat,
                     collectionSettings = collectionSettings,
-                    temperature = temperature
+                    temperature = temperature,
+                    compressionSettings = compressionSettings
                 ))
             }
 

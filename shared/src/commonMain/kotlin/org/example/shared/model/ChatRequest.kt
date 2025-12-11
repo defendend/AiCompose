@@ -8,5 +8,6 @@ data class ChatRequest(
     val conversationId: String? = null,
     val responseFormat: ResponseFormat = ResponseFormat.PLAIN,
     val collectionSettings: CollectionSettings? = null,
-    val temperature: Float? = null
+    val temperature: Float? = null,
+    val compressionSettings: CompressionSettings? = null
 )

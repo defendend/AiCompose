@@ -69,14 +69,19 @@ private fun ApplicationScope.App() {
                 Screen.SETTINGS -> {
                     val collectionSettings by chatViewModel.collectionSettings.collectAsState()
                     val temperature by chatViewModel.temperature.collectAsState()
+                    val compressionSettings by chatViewModel.compressionSettings.collectAsState()
                     SettingsScreen(
                         currentSettings = collectionSettings,
                         currentTemperature = temperature,
+                        currentCompressionSettings = compressionSettings,
                         onSettingsChanged = { settings ->
                             chatViewModel.setCollectionSettings(settings)
                         },
                         onTemperatureChanged = { temp ->
                             chatViewModel.setTemperature(temp)
+                        },
+                        onCompressionSettingsChanged = { settings ->
+                            chatViewModel.setCompressionSettings(settings)
                         },
                         onBack = { currentScreen = Screen.CHAT }
                     )
