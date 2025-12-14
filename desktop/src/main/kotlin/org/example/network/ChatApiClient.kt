@@ -23,8 +23,16 @@ import org.example.shared.model.ChatResponse
 import org.example.shared.model.ChatStreamRequest
 import org.example.shared.model.CollectionSettings
 import org.example.shared.model.CompressionSettings
+import org.example.shared.model.ConversationDetailResponse
+import org.example.shared.model.ConversationExport
+import org.example.shared.model.ConversationInfo
+import org.example.shared.model.ConversationListResponse
+import org.example.shared.model.CreateConversationRequest
 import org.example.shared.model.HealthCheckResponse
+import org.example.shared.model.ImportConversationRequest
+import org.example.shared.model.RenameConversationRequest
 import org.example.shared.model.ResponseFormat
+import org.example.shared.model.SearchResponse
 import org.example.shared.model.StreamEvent
 
 class ChatApiClient(
@@ -178,6 +186,125 @@ class ChatApiClient(
             Result.success(response.body())
         } catch (e: Exception) {
             AppLogger.error("ChatApiClient", "Ошибка health check: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    // === Методы для управления чатами ===
+
+    /**
+     * Получить список всех диалогов.
+     */
+    suspend fun getConversations(): Result<ConversationListResponse> {
+        return try {
+            val response = client.get("$baseUrl/api/conversations")
+            Result.success(response.body())
+        } catch (e: Exception) {
+            AppLogger.error("ChatApiClient", "Ошибка получения списка диалогов: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Получить детали диалога с историей сообщений.
+     */
+    suspend fun getConversation(conversationId: String): Result<ConversationDetailResponse> {
+        return try {
+            val response = client.get("$baseUrl/api/conversations/$conversationId")
+            Result.success(response.body())
+        } catch (e: Exception) {
+            AppLogger.error("ChatApiClient", "Ошибка получения диалога $conversationId: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Создать новый диалог.
+     */
+    suspend fun createConversation(title: String? = null): Result<ConversationInfo> {
+        return try {
+            val response = client.post("$baseUrl/api/conversations") {
+                contentType(ContentType.Application.Json)
+                setBody(CreateConversationRequest(title = title))
+            }
+            Result.success(response.body())
+        } catch (e: Exception) {
+            AppLogger.error("ChatApiClient", "Ошибка создания диалога: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Удалить диалог.
+     */
+    suspend fun deleteConversation(conversationId: String): Result<Unit> {
+        return try {
+            client.delete("$baseUrl/api/conversations/$conversationId")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            AppLogger.error("ChatApiClient", "Ошибка удаления диалога $conversationId: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Переименовать диалог.
+     */
+    suspend fun renameConversation(conversationId: String, newTitle: String): Result<ConversationInfo> {
+        return try {
+            val response = client.patch("$baseUrl/api/conversations/$conversationId") {
+                contentType(ContentType.Application.Json)
+                setBody(RenameConversationRequest(title = newTitle))
+            }
+            Result.success(response.body())
+        } catch (e: Exception) {
+            AppLogger.error("ChatApiClient", "Ошибка переименования диалога $conversationId: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Поиск по сообщениям.
+     */
+    suspend fun searchMessages(query: String): Result<SearchResponse> {
+        return try {
+            val response = client.get("$baseUrl/api/conversations/search") {
+                parameter("q", query)
+            }
+            Result.success(response.body())
+        } catch (e: Exception) {
+            AppLogger.error("ChatApiClient", "Ошибка поиска: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Экспорт диалога.
+     */
+    suspend fun exportConversation(conversationId: String, format: String = "json"): Result<ConversationExport> {
+        return try {
+            val response = client.get("$baseUrl/api/conversations/$conversationId/export") {
+                parameter("format", format)
+            }
+            Result.success(response.body())
+        } catch (e: Exception) {
+            AppLogger.error("ChatApiClient", "Ошибка экспорта диалога $conversationId: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Импорт диалога.
+     */
+    suspend fun importConversation(export: ConversationExport): Result<ConversationInfo> {
+        return try {
+            val response = client.post("$baseUrl/api/conversations/import") {
+                contentType(ContentType.Application.Json)
+                setBody(ImportConversationRequest(export = export))
+            }
+            Result.success(response.body())
+        } catch (e: Exception) {
+            AppLogger.error("ChatApiClient", "Ошибка импорта диалога: ${e.message}")
             Result.failure(e)
         }
     }

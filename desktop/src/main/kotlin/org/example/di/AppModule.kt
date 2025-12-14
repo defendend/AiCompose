@@ -2,7 +2,7 @@ package org.example.di
 
 import org.example.network.ChatApiClient
 import org.example.ui.ChatViewModel
-import org.koin.core.module.dsl.singleOf
+import org.example.ui.ConversationListViewModel
 import org.koin.dsl.module
 
 /**
@@ -14,4 +14,5 @@ val appModule = module {
 
     // UI layer
     single { ChatViewModel(get()) }
+    single { ConversationListViewModel(get()) }
 }

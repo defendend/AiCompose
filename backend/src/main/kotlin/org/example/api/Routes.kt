@@ -17,9 +17,17 @@ import org.example.logging.ServerLogger
 import org.example.model.LogCategory
 import org.example.model.LogLevel
 import org.example.model.LLMMessage
+import org.example.shared.model.ChatMessage
 import org.example.shared.model.ChatRequest
 import org.example.shared.model.ChatStreamRequest
+import org.example.shared.model.ConversationDetailResponse
+import org.example.shared.model.ConversationListResponse
+import org.example.shared.model.CreateConversationRequest
 import org.example.shared.model.HealthCheckResponse
+import org.example.shared.model.ImportConversationRequest
+import org.example.shared.model.MessageRole
+import org.example.shared.model.RenameConversationRequest
+import org.example.shared.model.SearchResponse
 import org.example.shared.model.ServiceHealth
 import java.util.UUID
 
@@ -335,6 +343,313 @@ fun Route.chatRoutes(
                     "Системный промпт и история диалога также считаются в контекст"
                 )
             ))
+        }
+
+        // === Управление чатами (Conversations) ===
+
+        /**
+         * Получить список всех диалогов.
+         * GET /api/conversations
+         */
+        get("/conversations") {
+            if (conversationRepository == null) {
+                call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Storage не настроен"))
+                return@get
+            }
+
+            try {
+                val conversations = conversationRepository.listConversations()
+                val response = ConversationListResponse(
+                    conversations = conversations,
+                    totalCount = conversations.size
+                )
+                call.respond(HttpStatusCode.OK, response)
+            } catch (e: Exception) {
+                ServerLogger.logError("Ошибка получения списка диалогов", e)
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Ошибка")))
+            }
+        }
+
+        /**
+         * Получить детали диалога с историей сообщений.
+         * GET /api/conversations/{id}
+         */
+        get("/conversations/{id}") {
+            if (conversationRepository == null) {
+                call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Storage не настроен"))
+                return@get
+            }
+
+            val conversationId = call.parameters["id"]
+            if (conversationId == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "ID диалога не указан"))
+                return@get
+            }
+
+            try {
+                val info = conversationRepository.getConversationInfo(conversationId)
+                if (info == null) {
+                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "Диалог не найден"))
+                    return@get
+                }
+
+                val history = conversationRepository.getHistory(conversationId)
+                val format = conversationRepository.getFormat(conversationId)
+
+                val messages = history.mapIndexed { index, msg ->
+                    ChatMessage(
+                        id = "$conversationId-$index",
+                        role = when (msg.role) {
+                            "user" -> MessageRole.USER
+                            "assistant" -> MessageRole.ASSISTANT
+                            "system" -> MessageRole.SYSTEM
+                            else -> MessageRole.USER
+                        },
+                        content = msg.content ?: "",
+                        timestamp = info.updatedAt
+                    )
+                }
+
+                val response = ConversationDetailResponse(
+                    id = info.id,
+                    title = info.title,
+                    messages = messages,
+                    responseFormat = format ?: org.example.shared.model.ResponseFormat.PLAIN,
+                    createdAt = info.createdAt,
+                    updatedAt = info.updatedAt
+                )
+                call.respond(HttpStatusCode.OK, response)
+            } catch (e: Exception) {
+                ServerLogger.logError("Ошибка получения диалога $conversationId", e)
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Ошибка")))
+            }
+        }
+
+        /**
+         * Создать новый диалог.
+         * POST /api/conversations
+         * Body: { "title": "Название" } (опционально)
+         */
+        post("/conversations") {
+            if (conversationRepository == null) {
+                call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Storage не настроен"))
+                return@post
+            }
+
+            try {
+                val request = try {
+                    call.receive<CreateConversationRequest>()
+                } catch (e: Exception) {
+                    CreateConversationRequest()
+                }
+
+                val conversationId = conversationRepository.createConversation(request.title)
+                val info = conversationRepository.getConversationInfo(conversationId)
+
+                if (info != null) {
+                    call.respond(HttpStatusCode.Created, info)
+                } else {
+                    call.respond(HttpStatusCode.Created, mapOf("id" to conversationId))
+                }
+            } catch (e: Exception) {
+                ServerLogger.logError("Ошибка создания диалога", e)
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Ошибка")))
+            }
+        }
+
+        /**
+         * Удалить диалог.
+         * DELETE /api/conversations/{id}
+         */
+        delete("/conversations/{id}") {
+            if (conversationRepository == null) {
+                call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Storage не настроен"))
+                return@delete
+            }
+
+            val conversationId = call.parameters["id"]
+            if (conversationId == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "ID диалога не указан"))
+                return@delete
+            }
+
+            try {
+                if (!conversationRepository.hasConversation(conversationId)) {
+                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "Диалог не найден"))
+                    return@delete
+                }
+
+                conversationRepository.deleteConversation(conversationId)
+                call.respond(HttpStatusCode.OK, mapOf("status" to "deleted", "id" to conversationId))
+            } catch (e: Exception) {
+                ServerLogger.logError("Ошибка удаления диалога $conversationId", e)
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Ошибка")))
+            }
+        }
+
+        /**
+         * Переименовать диалог.
+         * PATCH /api/conversations/{id}
+         * Body: { "title": "Новое название" }
+         */
+        patch("/conversations/{id}") {
+            if (conversationRepository == null) {
+                call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Storage не настроен"))
+                return@patch
+            }
+
+            val conversationId = call.parameters["id"]
+            if (conversationId == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "ID диалога не указан"))
+                return@patch
+            }
+
+            try {
+                val request = call.receive<RenameConversationRequest>()
+
+                if (!conversationRepository.hasConversation(conversationId)) {
+                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "Диалог не найден"))
+                    return@patch
+                }
+
+                conversationRepository.renameConversation(conversationId, request.title)
+                val info = conversationRepository.getConversationInfo(conversationId)
+
+                if (info != null) {
+                    call.respond(HttpStatusCode.OK, info)
+                } else {
+                    call.respond(HttpStatusCode.OK, mapOf("status" to "renamed", "id" to conversationId))
+                }
+            } catch (e: Exception) {
+                ServerLogger.logError("Ошибка переименования диалога $conversationId", e)
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Ошибка")))
+            }
+        }
+
+        /**
+         * Поиск по сообщениям.
+         * GET /api/conversations/search?q=запрос
+         */
+        get("/conversations/search") {
+            if (conversationRepository == null) {
+                call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Storage не настроен"))
+                return@get
+            }
+
+            val query = call.request.queryParameters["q"]
+            if (query.isNullOrBlank()) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Параметр q обязателен"))
+                return@get
+            }
+
+            try {
+                val results = conversationRepository.searchMessages(query)
+                val response = SearchResponse(
+                    results = results,
+                    totalCount = results.size,
+                    query = query
+                )
+                call.respond(HttpStatusCode.OK, response)
+            } catch (e: Exception) {
+                ServerLogger.logError("Ошибка поиска по сообщениям", e)
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Ошибка")))
+            }
+        }
+
+        /**
+         * Экспорт диалога.
+         * GET /api/conversations/{id}/export?format=json|markdown
+         */
+        get("/conversations/{id}/export") {
+            if (conversationRepository == null) {
+                call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Storage не настроен"))
+                return@get
+            }
+
+            val conversationId = call.parameters["id"]
+            if (conversationId == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "ID диалога не указан"))
+                return@get
+            }
+
+            val format = call.request.queryParameters["format"] ?: "json"
+
+            try {
+                val export = conversationRepository.exportConversation(conversationId)
+                if (export == null) {
+                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "Диалог не найден"))
+                    return@get
+                }
+
+                when (format.lowercase()) {
+                    "markdown" -> {
+                        val markdown = buildString {
+                            appendLine("# ${export.title}")
+                            appendLine()
+                            appendLine("*Экспортировано: ${java.time.Instant.ofEpochMilli(export.exportedAt)}*")
+                            appendLine()
+                            appendLine("---")
+                            appendLine()
+
+                            for (msg in export.messages) {
+                                val roleLabel = when (msg.role) {
+                                    "user" -> "**Пользователь**"
+                                    "assistant" -> "**Ассистент**"
+                                    "system" -> "*Система*"
+                                    else -> "**${msg.role}**"
+                                }
+                                appendLine("### $roleLabel")
+                                appendLine()
+                                appendLine(msg.content ?: "")
+                                appendLine()
+                            }
+                        }
+
+                        call.response.header(
+                            HttpHeaders.ContentDisposition,
+                            "attachment; filename=\"${export.title.replace(" ", "_")}.md\""
+                        )
+                        call.respondText(markdown, ContentType.Text.Plain)
+                    }
+                    else -> {
+                        call.response.header(
+                            HttpHeaders.ContentDisposition,
+                            "attachment; filename=\"${export.title.replace(" ", "_")}.json\""
+                        )
+                        call.respond(HttpStatusCode.OK, export)
+                    }
+                }
+            } catch (e: Exception) {
+                ServerLogger.logError("Ошибка экспорта диалога $conversationId", e)
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Ошибка")))
+            }
+        }
+
+        /**
+         * Импорт диалога.
+         * POST /api/conversations/import
+         * Body: { "export": {...} }
+         */
+        post("/conversations/import") {
+            if (conversationRepository == null) {
+                call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Storage не настроен"))
+                return@post
+            }
+
+            try {
+                val request = call.receive<ImportConversationRequest>()
+                val newId = conversationRepository.importConversation(request.export)
+                val info = conversationRepository.getConversationInfo(newId)
+
+                if (info != null) {
+                    call.respond(HttpStatusCode.Created, info)
+                } else {
+                    call.respond(HttpStatusCode.Created, mapOf("id" to newId))
+                }
+            } catch (e: Exception) {
+                ServerLogger.logError("Ошибка импорта диалога", e)
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Ошибка")))
+            }
         }
     }
 }

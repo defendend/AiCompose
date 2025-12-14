@@ -110,14 +110,33 @@ class RepositoryConfigTest {
     @Test
     fun `config with Redis enabled`() {
         val config = RepositoryConfig(
-            useRedis = true,
+            storageType = StorageType.REDIS,
             redisUrl = "redis://myhost:6380",
             redisTtlSeconds = 3600
         )
 
         assertEquals(true, config.useRedis)
+        assertEquals(StorageType.REDIS, config.storageType)
         assertEquals("redis://myhost:6380", config.redisUrl)
         assertEquals(3600, config.redisTtlSeconds)
+    }
+
+    @Test
+    fun `config with PostgreSQL enabled`() {
+        val config = RepositoryConfig(
+            storageType = StorageType.POSTGRES,
+            dbUrl = "jdbc:postgresql://myhost:5432/mydb",
+            dbUser = "myuser",
+            dbPassword = "secret",
+            dbPoolSize = 20
+        )
+
+        assertEquals(false, config.useRedis)
+        assertEquals(StorageType.POSTGRES, config.storageType)
+        assertEquals("jdbc:postgresql://myhost:5432/mydb", config.dbUrl)
+        assertEquals("myuser", config.dbUser)
+        assertEquals("secret", config.dbPassword)
+        assertEquals(20, config.dbPoolSize)
     }
 
     @Test

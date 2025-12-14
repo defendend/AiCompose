@@ -8,9 +8,14 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.example.model.LLMMessage
+import org.example.model.LLMToolCall
 import org.example.shared.model.CollectionSettings
 import org.example.shared.model.CompressionSettings
+import org.example.shared.model.ConversationExport
+import org.example.shared.model.ConversationInfo
+import org.example.shared.model.ExportedMessage
 import org.example.shared.model.ResponseFormat
+import org.example.shared.model.SearchResult
 import org.slf4j.LoggerFactory
 
 /**
@@ -44,6 +49,19 @@ class RedisConversationRepository(
     private fun formatKey(conversationId: String) = "conv:$conversationId:format"
     private fun settingsKey(conversationId: String) = "conv:$conversationId:settings"
     private fun compressionKey(conversationId: String) = "conv:$conversationId:compression"
+    private fun metadataKey(conversationId: String) = "conv:$conversationId:metadata"
+    private val conversationListKey = "conversations:list"
+
+    /**
+     * Метаданные диалога для Redis хранения
+     */
+    @kotlinx.serialization.Serializable
+    private data class RedisConversationMetadata(
+        val id: String,
+        val title: String = "Новый чат",
+        val createdAt: Long = System.currentTimeMillis(),
+        val updatedAt: Long = System.currentTimeMillis()
+    )
 
     override fun getHistory(conversationId: String): List<LLMMessage> = runBlocking {
         try {
@@ -206,6 +224,247 @@ class RedisConversationRepository(
             logger.error("Failed to get message count for conversation $conversationId", e)
             0
         }
+    }
+
+    // Методы для управления чатами
+
+    private fun getMetadata(conversationId: String): RedisConversationMetadata? = runBlocking {
+        try {
+            val data = commands.get(metadataKey(conversationId)).await()
+            data?.let { json.decodeFromString<RedisConversationMetadata>(it) }
+        } catch (e: Exception) {
+            logger.error("Failed to get metadata for conversation $conversationId", e)
+            null
+        }
+    }
+
+    private fun setMetadata(conversationId: String, metadata: RedisConversationMetadata) = runBlocking {
+        try {
+            val data = json.encodeToString(metadata)
+            commands.setex(metadataKey(conversationId), ttlSeconds, data).await()
+        } catch (e: Exception) {
+            logger.error("Failed to set metadata for conversation $conversationId", e)
+        }
+    }
+
+    private fun touchMetadata(conversationId: String) = runBlocking {
+        val meta = getMetadata(conversationId) ?: return@runBlocking
+        setMetadata(conversationId, meta.copy(updatedAt = System.currentTimeMillis()))
+    }
+
+    override fun listConversations(): List<ConversationInfo> = runBlocking {
+        try {
+            val conversationIds = commands.smembers(conversationListKey).await()
+            conversationIds.mapNotNull { id ->
+                val meta = getMetadata(id) ?: return@mapNotNull null
+                val messages = getHistory(id)
+                val lastMessage = messages
+                    .filter { it.role == "user" || it.role == "assistant" }
+                    .lastOrNull()
+
+                ConversationInfo(
+                    id = meta.id,
+                    title = meta.title,
+                    lastMessage = lastMessage?.content?.take(100),
+                    messageCount = messages.size,
+                    createdAt = meta.createdAt,
+                    updatedAt = meta.updatedAt
+                )
+            }.sortedByDescending { it.updatedAt }
+        } catch (e: Exception) {
+            logger.error("Failed to list conversations", e)
+            emptyList()
+        }
+    }
+
+    override fun getConversationInfo(conversationId: String): ConversationInfo? = runBlocking {
+        try {
+            val meta = getMetadata(conversationId) ?: return@runBlocking null
+            val messages = getHistory(conversationId)
+            val lastMessage = messages
+                .filter { it.role == "user" || it.role == "assistant" }
+                .lastOrNull()
+
+            ConversationInfo(
+                id = meta.id,
+                title = meta.title,
+                lastMessage = lastMessage?.content?.take(100),
+                messageCount = messages.size,
+                createdAt = meta.createdAt,
+                updatedAt = meta.updatedAt
+            )
+        } catch (e: Exception) {
+            logger.error("Failed to get conversation info for $conversationId", e)
+            null
+        }
+    }
+
+    override fun createConversation(title: String?): String = runBlocking {
+        val id = java.util.UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+
+        try {
+            val metadata = RedisConversationMetadata(
+                id = id,
+                title = title ?: "Новый чат",
+                createdAt = now,
+                updatedAt = now
+            )
+            setMetadata(id, metadata)
+
+            // Добавляем в список диалогов
+            commands.sadd(conversationListKey, id).await()
+
+            // Создаём пустой массив сообщений
+            val data = json.encodeToString(emptyList<LLMMessage>())
+            commands.setex(messagesKey(id), ttlSeconds, data).await()
+
+            logger.debug("Created conversation $id")
+        } catch (e: Exception) {
+            logger.error("Failed to create conversation", e)
+        }
+
+        id
+    }
+
+    override fun renameConversation(conversationId: String, newTitle: String) = runBlocking {
+        try {
+            val meta = getMetadata(conversationId)
+            if (meta != null) {
+                setMetadata(conversationId, meta.copy(title = newTitle, updatedAt = System.currentTimeMillis()))
+                logger.debug("Renamed conversation $conversationId to '$newTitle'")
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to rename conversation $conversationId", e)
+        }
+    }
+
+    override fun deleteConversation(conversationId: String) = runBlocking {
+        try {
+            // Удаляем все ключи диалога
+            commands.del(
+                messagesKey(conversationId),
+                metadataKey(conversationId),
+                formatKey(conversationId),
+                settingsKey(conversationId),
+                compressionKey(conversationId)
+            ).await()
+
+            // Удаляем из списка диалогов
+            commands.srem(conversationListKey, conversationId).await()
+
+            logger.debug("Deleted conversation $conversationId")
+        } catch (e: Exception) {
+            logger.error("Failed to delete conversation $conversationId", e)
+        }
+    }
+
+    override fun searchMessages(query: String): List<SearchResult> = runBlocking {
+        val results = mutableListOf<SearchResult>()
+        val lowerQuery = query.lowercase()
+
+        try {
+            val conversationIds = commands.smembers(conversationListKey).await()
+
+            for (convId in conversationIds) {
+                val meta = getMetadata(convId) ?: continue
+                val messages = getHistory(convId)
+
+                for ((index, message) in messages.withIndex()) {
+                    val content = message.content ?: continue
+                    if (content.lowercase().contains(lowerQuery)) {
+                        val startIndex = content.lowercase().indexOf(lowerQuery)
+                        val contextStart = maxOf(0, startIndex - 30)
+                        val contextEnd = minOf(content.length, startIndex + query.length + 30)
+                        val highlight = buildString {
+                            if (contextStart > 0) append("...")
+                            append(content.substring(contextStart, contextEnd))
+                            if (contextEnd < content.length) append("...")
+                        }
+
+                        results.add(
+                            SearchResult(
+                                conversationId = convId,
+                                conversationTitle = meta.title,
+                                messageId = "$convId-$index",
+                                content = content.take(200),
+                                role = message.role,
+                                timestamp = meta.updatedAt,
+                                highlight = highlight
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to search messages", e)
+        }
+
+        results.sortedByDescending { it.timestamp }
+    }
+
+    override fun exportConversation(conversationId: String): ConversationExport? = runBlocking {
+        try {
+            val meta = getMetadata(conversationId) ?: return@runBlocking null
+            val messages = getHistory(conversationId)
+
+            val exportedMessages = messages.mapIndexed { index, msg ->
+                ExportedMessage(
+                    id = "$conversationId-$index",
+                    role = msg.role,
+                    content = msg.content,
+                    timestamp = meta.updatedAt,
+                    toolCalls = msg.tool_calls?.let { json.encodeToString(it) },
+                    toolCallId = msg.tool_call_id
+                )
+            }
+
+            ConversationExport(
+                id = conversationId,
+                title = meta.title,
+                messages = exportedMessages,
+                exportedAt = System.currentTimeMillis(),
+                format = "json"
+            )
+        } catch (e: Exception) {
+            logger.error("Failed to export conversation $conversationId", e)
+            null
+        }
+    }
+
+    override fun importConversation(export: ConversationExport): String = runBlocking {
+        val id = java.util.UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+
+        try {
+            val metadata = RedisConversationMetadata(
+                id = id,
+                title = export.title,
+                createdAt = now,
+                updatedAt = now
+            )
+            setMetadata(id, metadata)
+
+            commands.sadd(conversationListKey, id).await()
+
+            val messages = export.messages.map { msg ->
+                LLMMessage(
+                    role = msg.role,
+                    content = msg.content,
+                    tool_calls = msg.toolCalls?.let { json.decodeFromString<List<LLMToolCall>>(it) },
+                    tool_call_id = msg.toolCallId
+                )
+            }
+
+            val data = json.encodeToString(messages)
+            commands.setex(messagesKey(id), ttlSeconds, data).await()
+
+            logger.debug("Imported conversation as $id")
+        } catch (e: Exception) {
+            logger.error("Failed to import conversation", e)
+        }
+
+        id
     }
 
     /**

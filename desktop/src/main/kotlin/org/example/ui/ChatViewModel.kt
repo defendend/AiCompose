@@ -14,6 +14,7 @@ import org.example.network.ChatApiClient
 import org.example.shared.model.ChatMessage
 import org.example.shared.model.CollectionSettings
 import org.example.shared.model.CompressionSettings
+import org.example.shared.model.ConversationDetailResponse
 import org.example.shared.model.MessageRole
 import org.example.shared.model.ResponseFormat
 import org.example.shared.model.StreamEventType
@@ -54,7 +55,8 @@ class ChatViewModel(
     private val _compressionSettings = MutableStateFlow<CompressionSettings?>(null)
     val compressionSettings: StateFlow<CompressionSettings?> = _compressionSettings.asStateFlow()
 
-    private var conversationId: String? = null
+    private val _conversationId = MutableStateFlow<String?>(null)
+    val conversationId: StateFlow<String?> = _conversationId.asStateFlow()
 
     fun setResponseFormat(format: ResponseFormat) {
         _responseFormat.value = format
@@ -125,7 +127,7 @@ class ChatViewModel(
             try {
                 apiClient.sendMessageStream(
                     text = text,
-                    conversationId = conversationId,
+                    conversationId = _conversationId.value,
                     responseFormat = _responseFormat.value,
                     collectionSettings = if (shouldSendSettings) currentSettings else null,
                     temperature = _temperature.value
@@ -139,7 +141,7 @@ class ChatViewModel(
                     withContext(Dispatchers.Main) {
                         when (event.type) {
                             StreamEventType.START -> {
-                                conversationId = event.conversationId
+                                _conversationId.value = event.conversationId
                                 messageId = event.messageId
                                 AppLogger.info("ChatViewModel", "Streaming начат: ${event.messageId}")
                             }
@@ -223,14 +225,14 @@ class ChatViewModel(
 
             apiClient.sendMessage(
                 text = text,
-                conversationId = conversationId,
+                conversationId = _conversationId.value,
                 responseFormat = _responseFormat.value,
                 collectionSettings = if (shouldSendSettings) currentSettings else null,
                 temperature = _temperature.value,
                 compressionSettings = _compressionSettings.value
             )
                 .onSuccess { response ->
-                    conversationId = response.conversationId
+                    _conversationId.value = response.conversationId
                     _messages.value = _messages.value + response.message
 
                     response.message.toolCall?.let { toolCall ->
@@ -269,7 +271,53 @@ class ChatViewModel(
 
     fun clearChat() {
         _messages.value = emptyList()
-        conversationId = null
+        _conversationId.value = null
         AppLogger.info("ChatViewModel", "Чат очищен")
+    }
+
+    /**
+     * Загрузить диалог с сервера по ID.
+     */
+    fun loadConversation(id: String) {
+        scope.launch {
+            _isLoading.value = true
+            _error.value = null
+
+            apiClient.getConversation(id)
+                .onSuccess { response ->
+                    _conversationId.value = id
+                    // Фильтруем системные сообщения — не показываем их пользователю
+                    _messages.value = response.messages.filter { it.role != MessageRole.SYSTEM }
+                    AppLogger.info("ChatViewModel", "Загружен диалог: $id, ${_messages.value.size} сообщений")
+                }
+                .onFailure { e ->
+                    AppLogger.error("ChatViewModel", "Ошибка загрузки диалога: ${e.message}")
+                    _error.value = e.message ?: "Ошибка загрузки диалога"
+                }
+
+            _isLoading.value = false
+        }
+    }
+
+    /**
+     * Переключиться на другой диалог.
+     */
+    fun switchConversation(id: String?) {
+        if (id == null) {
+            clearChat()
+        } else {
+            loadConversation(id)
+        }
+    }
+
+    /**
+     * Начать новый диалог (очищает текущий и сбрасывает conversationId).
+     */
+    fun startNewConversation() {
+        _messages.value = emptyList()
+        _conversationId.value = null
+        _streamingContent.value = ""
+        _error.value = null
+        AppLogger.info("ChatViewModel", "Начат новый диалог")
     }
 }
