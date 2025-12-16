@@ -85,7 +85,7 @@ class WeatherMcpClient {
             val result = client!!.callTool(
                 name = "get_current_weather",
                 arguments = buildJsonObject {
-                    put("location", location)
+                    put("city", location)
                 }
             )
 
@@ -119,7 +119,7 @@ class WeatherMcpClient {
             val result = client!!.callTool(
                 name = "get_weather_details",
                 arguments = buildJsonObject {
-                    put("location", location)
+                    put("city", location)
                 }
             )
 
@@ -149,7 +149,7 @@ class WeatherMcpClient {
             val result = client!!.callTool(
                 name = "get_air_quality",
                 arguments = buildJsonObject {
-                    put("location", location)
+                    put("city", location)
                 }
             )
 

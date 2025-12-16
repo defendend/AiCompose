@@ -185,7 +185,7 @@ class McpToolsAdapter(
     // Инструмент: текущая погода
     inner class WeatherGetCurrent : AgentTool {
         override val name = "weather_get_current"
-        override val description = "Получает текущую погоду для указанного города или местоположения"
+        override val description = "Получает текущую погоду для указанного города"
 
         override fun getDefinition() = Tool(
             type = "function",
@@ -195,12 +195,12 @@ class McpToolsAdapter(
                 parameters = FunctionParameters(
                     type = "object",
                     properties = mapOf(
-                        "location" to PropertyDefinition(
+                        "city" to PropertyDefinition(
                             type = "string",
-                            description = "Название города или местоположения (например, 'Moscow', 'London', 'New York')"
+                            description = "Название города (например, 'Moscow', 'London', 'New York')"
                         )
                     ),
-                    required = listOf("location")
+                    required = listOf("city")
                 )
             )
         )
@@ -212,10 +212,10 @@ class McpToolsAdapter(
 
             return try {
                 val args = Json.parseToJsonElement(arguments).jsonObject
-                val location = args["location"]?.jsonPrimitive?.content
-                    ?: return "Ошибка: не указано местоположение"
+                val city = args["city"]?.jsonPrimitive?.content
+                    ?: return "Ошибка: не указан город"
 
-                weatherMcpClient.getCurrentWeather(location)
+                weatherMcpClient.getCurrentWeather(city)
             } catch (e: Exception) {
                 "❌ Ошибка при получении погоды: ${e.message}"
             }
@@ -235,12 +235,12 @@ class McpToolsAdapter(
                 parameters = FunctionParameters(
                     type = "object",
                     properties = mapOf(
-                        "location" to PropertyDefinition(
+                        "city" to PropertyDefinition(
                             type = "string",
-                            description = "Название города или местоположения"
+                            description = "Название города"
                         )
                     ),
-                    required = listOf("location")
+                    required = listOf("city")
                 )
             )
         )
@@ -252,10 +252,10 @@ class McpToolsAdapter(
 
             return try {
                 val args = Json.parseToJsonElement(arguments).jsonObject
-                val location = args["location"]?.jsonPrimitive?.content
-                    ?: return "Ошибка: не указано местоположение"
+                val city = args["city"]?.jsonPrimitive?.content
+                    ?: return "Ошибка: не указан город"
 
-                weatherMcpClient.getWeatherDetails(location)
+                weatherMcpClient.getWeatherDetails(city)
             } catch (e: Exception) {
                 "❌ Ошибка при получении деталей погоды: ${e.message}"
             }
@@ -265,7 +265,7 @@ class McpToolsAdapter(
     // Инструмент: качество воздуха
     inner class WeatherGetAirQuality : AgentTool {
         override val name = "weather_get_air_quality"
-        override val description = "Получает информацию о качестве воздуха для указанного местоположения"
+        override val description = "Получает информацию о качестве воздуха для указанного города"
 
         override fun getDefinition() = Tool(
             type = "function",
@@ -275,12 +275,12 @@ class McpToolsAdapter(
                 parameters = FunctionParameters(
                     type = "object",
                     properties = mapOf(
-                        "location" to PropertyDefinition(
+                        "city" to PropertyDefinition(
                             type = "string",
-                            description = "Название города или местоположения"
+                            description = "Название города"
                         )
                     ),
-                    required = listOf("location")
+                    required = listOf("city")
                 )
             )
         )
@@ -292,10 +292,10 @@ class McpToolsAdapter(
 
             return try {
                 val args = Json.parseToJsonElement(arguments).jsonObject
-                val location = args["location"]?.jsonPrimitive?.content
-                    ?: return "Ошибка: не указано местоположение"
+                val city = args["city"]?.jsonPrimitive?.content
+                    ?: return "Ошибка: не указан город"
 
-                weatherMcpClient.getAirQuality(location)
+                weatherMcpClient.getAirQuality(city)
             } catch (e: Exception) {
                 "❌ Ошибка при получении качества воздуха: ${e.message}"
             }
