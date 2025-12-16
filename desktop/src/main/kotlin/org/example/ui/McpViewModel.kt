@@ -91,8 +91,8 @@ class McpViewModel {
                     CallToolResult(content = listOf(TextContent(text = "Reversed: ${text.reversed()}")))
                 }
 
-                // Создаём информацию о сервере для UI
-                val serverInfo = McpServerInfo(
+                // Создаём информацию о Demo сервере для UI
+                val demoServerInfo = McpServerInfo(
                     id = "demo-server-1",
                     name = "AiCompose Demo Server",
                     version = "1.0.0",
@@ -106,7 +106,34 @@ class McpViewModel {
                     )
                 )
 
-                _servers.add(serverInfo)
+                _servers.add(demoServerInfo)
+
+                // Добавляем Яндекс.Трекер сервер
+                val trackerServerInfo = McpServerInfo(
+                    id = "yandex-tracker-server",
+                    name = "Яндекс.Трекер Server",
+                    version = "1.0.0",
+                    status = McpConnectionStatus.CONNECTED,
+                    tools = listOf(
+                        McpTool(
+                            "yandex_tracker_get_open_issues_count",
+                            "Получает количество открытых задач в очереди",
+                            """{"queue": "string"}"""
+                        ),
+                        McpTool(
+                            "yandex_tracker_search_issues",
+                            "Ищет задачи по фильтрам (очередь, статус, исполнитель)",
+                            """{"queue": "string?", "status": "string?", "assignee": "string?"}"""
+                        ),
+                        McpTool(
+                            "yandex_tracker_get_issue",
+                            "Получает детальную информацию о задаче",
+                            """{"issue_key": "string"}"""
+                        )
+                    )
+                )
+
+                _servers.add(trackerServerInfo)
 
             } catch (e: Exception) {
                 println("Ошибка создания демо сервера: ${e.message}")
