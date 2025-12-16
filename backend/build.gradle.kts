@@ -58,6 +58,9 @@ dependencies {
     implementation("io.insert-koin:koin-ktor:4.0.0")
     implementation("io.insert-koin:koin-logger-slf4j:4.0.0")
 
+    // MCP (Model Context Protocol)
+    implementation("io.modelcontextprotocol:kotlin-sdk:0.8.1")
+
     testImplementation(kotlin("test"))
     testImplementation("io.ktor:ktor-server-test-host:3.0.3")
     testImplementation("io.mockk:mockk:1.13.13")
@@ -76,4 +79,12 @@ tasks.test {
 
 kotlin {
     jvmToolchain(21)
+}
+
+// Task для запуска MCP демонстрации
+tasks.register<JavaExec>("runMcpDemo") {
+    group = "application"
+    description = "Run MCP demonstration"
+    mainClass.set("org.example.mcp.McpDemoKt")
+    classpath = sourceSets["main"].runtimeClasspath
 }

@@ -23,9 +23,11 @@ import org.example.ui.ConversationListViewModel
 import org.example.ui.components.ChatScreen
 import org.example.ui.components.ConversationListPanel
 import org.example.ui.components.LogWindow
+import org.example.ui.components.McpServersScreen
 import org.example.ui.components.ModelComparisonScreen
 import org.example.ui.components.ServerLogWindow
 import org.example.ui.components.SettingsScreen
+import org.example.ui.McpViewModel
 import org.example.ui.ModelComparisonViewModel
 import org.example.ui.theme.AppTheme
 import org.koin.compose.KoinApplication
@@ -34,7 +36,8 @@ import org.koin.compose.koinInject
 enum class Screen {
     CHAT,
     SETTINGS,
-    MODEL_COMPARISON
+    MODEL_COMPARISON,
+    MCP_SERVERS
 }
 
 fun main() = application {
@@ -55,6 +58,7 @@ private fun ApplicationScope.App() {
     val conversationListViewModel: ConversationListViewModel = koinInject()
     val apiClient: ChatApiClient = koinInject()
     val modelComparisonViewModel = remember { ModelComparisonViewModel() }
+    val mcpViewModel = remember { McpViewModel() }
 
     // Загружаем список чатов при запуске
     LaunchedEffect(Unit) {
@@ -76,7 +80,8 @@ private fun ApplicationScope.App() {
                     onToggleLogs = { showLogWindow = !showLogWindow },
                     onToggleServerLogs = { showServerLogWindow = !showServerLogWindow },
                     onOpenSettings = { currentScreen = Screen.SETTINGS },
-                    onOpenModelComparison = { currentScreen = Screen.MODEL_COMPARISON }
+                    onOpenModelComparison = { currentScreen = Screen.MODEL_COMPARISON },
+                    onOpenMcpServers = { currentScreen = Screen.MCP_SERVERS }
                 )
                 Screen.SETTINGS -> {
                     val collectionSettings by chatViewModel.collectionSettings.collectAsState()
@@ -101,6 +106,12 @@ private fun ApplicationScope.App() {
                 Screen.MODEL_COMPARISON -> {
                     ModelComparisonScreen(
                         viewModel = modelComparisonViewModel,
+                        onBack = { currentScreen = Screen.CHAT }
+                    )
+                }
+                Screen.MCP_SERVERS -> {
+                    McpServersScreen(
+                        viewModel = mcpViewModel,
                         onBack = { currentScreen = Screen.CHAT }
                     )
                 }
@@ -129,7 +140,8 @@ private fun MainContent(
     onToggleLogs: () -> Unit,
     onToggleServerLogs: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenModelComparison: () -> Unit
+    onOpenModelComparison: () -> Unit,
+    onOpenMcpServers: () -> Unit
 ) {
     val collectionSettings by chatViewModel.collectionSettings.collectAsState()
     val conversations by conversationListViewModel.conversations.collectAsState()
@@ -287,6 +299,16 @@ private fun MainContent(
                                 },
                                 leadingIcon = {
                                     Text("🔬")
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("MCP Серверы") },
+                                onClick = {
+                                    showMenu = false
+                                    onOpenMcpServers()
+                                },
+                                leadingIcon = {
+                                    Text("🔌")
                                 }
                             )
                             HorizontalDivider()

@@ -30,6 +30,9 @@ dependencies {
     implementation("io.insert-koin:koin-core:4.0.0")
     implementation("io.insert-koin:koin-compose:4.0.0")
 
+    // MCP (Model Context Protocol)
+    implementation("io.modelcontextprotocol:kotlin-sdk:0.8.1")
+
     testImplementation(kotlin("test"))
 }
 
