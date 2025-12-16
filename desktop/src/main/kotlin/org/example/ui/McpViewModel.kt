@@ -135,6 +135,33 @@ class McpViewModel {
 
                 _servers.add(trackerServerInfo)
 
+                // Добавляем Weather MCP сервер (Open-Meteo)
+                val weatherServerInfo = McpServerInfo(
+                    id = "weather-mcp-server",
+                    name = "Weather MCP Server (Open-Meteo)",
+                    version = "1.0.0",
+                    status = McpConnectionStatus.CONNECTED,
+                    tools = listOf(
+                        McpTool(
+                            "weather_get_current",
+                            "Получает текущую погоду для указанного города",
+                            """{"city": "string"}"""
+                        ),
+                        McpTool(
+                            "weather_get_details",
+                            "Получает детальную информацию о погоде в JSON формате",
+                            """{"city": "string"}"""
+                        ),
+                        McpTool(
+                            "weather_get_air_quality",
+                            "Получает информацию о качестве воздуха для указанного города",
+                            """{"city": "string"}"""
+                        )
+                    )
+                )
+
+                _servers.add(weatherServerInfo)
+
             } catch (e: Exception) {
                 println("Ошибка создания демо сервера: ${e.message}")
                 e.printStackTrace()
