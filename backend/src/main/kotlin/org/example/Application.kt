@@ -12,14 +12,19 @@ import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.runBlocking
 import org.example.agent.Agent
 import org.example.api.chatRoutes
 import org.example.data.ConversationRepository
 import org.example.data.LLMClient
 import org.example.di.appModule
+import org.example.integrations.WeatherMcpClient
 import org.example.logging.ServerLogger
 import org.example.model.LogLevel
+import org.example.tools.McpToolsAdapter
+import org.example.tools.core.ToolRegistry
 import org.koin.ktor.ext.inject
+import org.koin.ktor.ext.getKoin
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
 import org.slf4j.LoggerFactory
@@ -36,6 +41,7 @@ fun main() {
 
     embeddedServer(Netty, port = 8080, host = "0.0.0.0") {
         configureKoin(apiKey)
+        configureMcpTools()
         configurePlugins()
         configureRouting()
     }.start(wait = true)
@@ -48,6 +54,47 @@ fun Application.configureKoin(apiKey: String) {
     install(Koin) {
         slf4jLogger()
         modules(appModule(apiKey))
+    }
+}
+
+/**
+ * Инициализация MCP инструментов.
+ * Подключается к MCP серверам и регистрирует инструменты в ToolRegistry.
+ */
+fun Application.configureMcpTools() {
+    val logger = LoggerFactory.getLogger("Application")
+
+    runBlocking {
+        try {
+            // Получаем зависимости через Koin
+            val koin = getKoin()
+            val weatherMcpClient = koin.getOrNull<WeatherMcpClient>()
+            val mcpToolsAdapter = koin.get<McpToolsAdapter>()
+
+            // Подключаемся к MCP серверу погоды, если доступен
+            if (weatherMcpClient != null) {
+                logger.info("🌦️  Подключение к MCP серверу погоды...")
+                weatherMcpClient.connect()
+                logger.info("✅ MCP сервер погоды подключен")
+            } else {
+                logger.info("ℹ️  MCP сервер погоды недоступен")
+            }
+
+            // Регистрируем MCP инструменты в ToolRegistry
+            val mcpTools = mcpToolsAdapter.getTools()
+            logger.info("📋 Регистрация ${mcpTools.size} MCP инструментов...")
+            mcpTools.forEach { tool ->
+                ToolRegistry.register(tool)
+                logger.debug("  ✓ ${tool.name}")
+            }
+
+            logger.info("✅ Зарегистрировано инструментов: ${ToolRegistry.size()}")
+            logger.info("📝 Доступные инструменты: ${ToolRegistry.getToolNames()}")
+
+        } catch (e: Exception) {
+            logger.error("❌ Ошибка при инициализации MCP инструментов", e)
+            // Не бросаем исключение, чтобы сервер мог запуститься без MCP
+        }
     }
 }
 

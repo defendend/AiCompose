@@ -2,6 +2,10 @@ package org.example.di
 
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.serialization.kotlinx.json.*
 import org.example.agent.Agent
 import org.example.agent.PromptBuilder
 import org.example.agent.ToolExecutor
@@ -11,6 +15,9 @@ import org.example.data.InMemoryConversationRepository
 import org.example.data.LLMClient
 import org.example.data.PostgresConversationRepository
 import org.example.data.RedisConversationRepository
+import org.example.integrations.WeatherMcpClient
+import org.example.tools.McpToolsAdapter
+import org.example.tools.core.ToolRegistry
 import org.jetbrains.exposed.sql.Database
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
@@ -150,6 +157,42 @@ fun appModule(
                 InMemoryConversationRepository()
             }
         }
+    }
+
+    // HTTP клиент для MCP интеграций
+    single {
+        HttpClient(CIO) {
+            install(ContentNegotiation) {
+                json()
+            }
+        }
+    }
+
+    // MCP Weather Client
+    single {
+        val weatherClient = WeatherMcpClient()
+        // Проверяем доступность MCP сервера
+        if (weatherClient.isAvailable()) {
+            logger.info("✅ MCP сервер погоды доступен")
+            weatherClient
+        } else {
+            logger.warn("⚠️  MCP сервер погоды недоступен. Установите: pip install mcp_weather_server")
+            null
+        }
+    }
+
+    // MCP Tools Adapter
+    single {
+        val trackerToken = System.getenv("YANDEX_TRACKER_TOKEN")
+        val trackerOrgId = System.getenv("YANDEX_TRACKER_ORG_ID")
+        val weatherClient: WeatherMcpClient? = get()
+
+        McpToolsAdapter(
+            httpClient = get(),
+            trackerToken = trackerToken,
+            trackerOrgId = trackerOrgId,
+            weatherMcpClient = weatherClient
+        )
     }
 
     // Agent layer
