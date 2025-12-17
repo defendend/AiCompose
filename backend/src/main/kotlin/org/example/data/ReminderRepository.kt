@@ -101,6 +101,17 @@ class ReminderRepository(
     }
 
     /**
+     * Получить уведомленные напоминания (для отображения в Desktop)
+     * Возвращает последние N напоминаний, которые были помечены как notified
+     */
+    fun getNotifications(limit: Int = 10): List<Reminder> {
+        return reminders
+            .filter { it.notified }
+            .sortedByDescending { it.updatedAt }
+            .take(limit)
+    }
+
+    /**
      * Обновить напоминание
      */
     fun update(id: String, updater: (Reminder) -> Reminder): Reminder? {

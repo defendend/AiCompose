@@ -2,6 +2,8 @@ package org.example.ui
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -57,6 +59,9 @@ class ChatViewModel(
 
     private val _conversationId = MutableStateFlow<String?>(null)
     val conversationId: StateFlow<String?> = _conversationId.asStateFlow()
+
+    private val _currentNotification = MutableStateFlow<String?>(null)
+    val currentNotification: StateFlow<String?> = _currentNotification.asStateFlow()
 
     fun setResponseFormat(format: ResponseFormat) {
         _responseFormat.value = format
@@ -319,5 +324,77 @@ class ChatViewModel(
         _streamingContent.value = ""
         _error.value = null
         AppLogger.info("ChatViewModel", "Начат новый диалог")
+    }
+
+    // ========== Notification Polling ==========
+
+    private var notificationPollingJob: Job? = null
+    private val shownNotificationIds = mutableSetOf<String>()
+
+    /**
+     * Запустить polling уведомлений о напоминаниях.
+     * Проверяет каждые 30 секунд.
+     */
+    fun startNotificationPolling() {
+        if (notificationPollingJob?.isActive == true) {
+            AppLogger.info("ChatViewModel", "Polling уведомлений уже запущен")
+            return
+        }
+
+        notificationPollingJob = scope.launch {
+            AppLogger.info("ChatViewModel", "🔔 Запущен polling уведомлений (каждые 30 сек)")
+
+            while (true) {
+                try {
+                    val result = apiClient.getReminderNotifications(limit = 10)
+                    result.onSuccess { response ->
+                        val newNotifications = response.notifications.filter {
+                            !shownNotificationIds.contains(it.id)
+                        }
+
+                        if (newNotifications.isNotEmpty()) {
+                            AppLogger.info("ChatViewModel", "📬 Получено ${newNotifications.size} новых уведомлений")
+
+                            newNotifications.forEach { notification ->
+                                // Показываем in-app уведомление
+                                withContext(Dispatchers.Main) {
+                                    _currentNotification.value = "⏰ ${notification.title}"
+                                }
+                                shownNotificationIds.add(notification.id)
+
+                                // Автоматически скрываем через 5 секунд
+                                delay(5000)
+                                withContext(Dispatchers.Main) {
+                                    _currentNotification.value = null
+                                }
+                            }
+                        }
+                    }
+                    result.onFailure { error ->
+                        AppLogger.error("ChatViewModel", "Ошибка polling уведомлений: ${error.message}")
+                    }
+                } catch (e: Exception) {
+                    AppLogger.error("ChatViewModel", "Ошибка в polling loop: ${e.message}")
+                }
+
+                delay(30_000) // 30 секунд
+            }
+        }
+    }
+
+    /**
+     * Остановить polling уведомлений.
+     */
+    fun stopNotificationPolling() {
+        notificationPollingJob?.cancel()
+        notificationPollingJob = null
+        AppLogger.info("ChatViewModel", "🔕 Polling уведомлений остановлен")
+    }
+
+    /**
+     * Скрыть текущее уведомление.
+     */
+    fun dismissNotification() {
+        _currentNotification.value = null
     }
 }

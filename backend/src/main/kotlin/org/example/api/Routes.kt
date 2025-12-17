@@ -37,7 +37,8 @@ private val jsonCompact = Json { prettyPrint = false }
 fun Route.chatRoutes(
     agent: Agent,
     llmClient: LLMClient? = null,
-    conversationRepository: ConversationRepository? = null
+    conversationRepository: ConversationRepository? = null,
+    reminderRepository: org.example.data.ReminderRepository? = null
 ) {
     route("/api") {
         post("/chat") {
@@ -648,6 +649,41 @@ fun Route.chatRoutes(
                 }
             } catch (e: Exception) {
                 ServerLogger.logError("Ошибка импорта диалога", e)
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Ошибка")))
+            }
+        }
+
+        /**
+         * Получить уведомления о напоминаниях (для Desktop polling).
+         * GET /api/reminders/notifications?limit=10
+         */
+        get("/reminders/notifications") {
+            if (reminderRepository == null) {
+                call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "ReminderRepository не настроен"))
+                return@get
+            }
+
+            try {
+                val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 10
+                val reminders = reminderRepository.getNotifications(limit)
+                val dtos = reminders.map { reminder ->
+                    org.example.model.ReminderNotificationDto(
+                        id = reminder.id,
+                        title = reminder.title,
+                        description = reminder.description,
+                        reminderTime = reminder.reminderTime.toString(),
+                        notified = reminder.notified
+                    )
+                }
+
+                val response = org.example.model.ReminderNotificationsResponse(
+                    notifications = dtos,
+                    count = dtos.size
+                )
+
+                call.respond(HttpStatusCode.OK, response)
+            } catch (e: Exception) {
+                ServerLogger.logError("Ошибка получения уведомлений", e)
                 call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Ошибка")))
             }
         }

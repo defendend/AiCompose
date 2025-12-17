@@ -65,6 +65,22 @@ private fun ApplicationScope.App() {
         conversationListViewModel.loadConversations()
     }
 
+    // Инициализируем системные уведомления и запускаем polling
+    LaunchedEffect(Unit) {
+        org.example.notification.NotificationManager.initialize()
+        chatViewModel.startNotificationPolling()
+        AppLogger.info("App", "📬 Инициализированы системные уведомления и polling")
+    }
+
+    // Останавливаем polling при закрытии приложения
+    DisposableEffect(Unit) {
+        onDispose {
+            chatViewModel.stopNotificationPolling()
+            org.example.notification.NotificationManager.cleanup()
+            AppLogger.info("App", "🔕 Уведомления остановлены")
+        }
+    }
+
     Window(
         onCloseRequest = ::exitApplication,
         title = "AiCompose",

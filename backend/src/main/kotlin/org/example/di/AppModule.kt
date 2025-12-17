@@ -192,7 +192,7 @@ fun appModule(
     // Reminder Scheduler
     single {
         val repository: ReminderRepository = get()
-        ReminderScheduler(repository, checkIntervalMinutes = 5)
+        ReminderScheduler(repository, checkIntervalSeconds = 15)
     }
 
     // MCP Tools Adapter

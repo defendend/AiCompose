@@ -160,8 +160,9 @@ fun Application.configureRouting() {
     val agent by inject<Agent>()
     val llmClient by inject<LLMClient>()
     val conversationRepository by inject<ConversationRepository>()
+    val reminderRepository by inject<org.example.data.ReminderRepository>()
 
     routing {
-        chatRoutes(agent, llmClient, conversationRepository)
+        chatRoutes(agent, llmClient, conversationRepository, reminderRepository)
     }
 }

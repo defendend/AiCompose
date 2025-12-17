@@ -309,6 +309,21 @@ class ChatApiClient(
         }
     }
 
+    /**
+     * Получить уведомления о напоминаниях.
+     */
+    suspend fun getReminderNotifications(limit: Int = 10): Result<org.example.model.ReminderNotificationsResponse> {
+        return try {
+            val response = client.get("$baseUrl/api/reminders/notifications") {
+                parameter("limit", limit)
+            }
+            Result.success(response.body())
+        } catch (e: Exception) {
+            AppLogger.error("ChatApiClient", "Ошибка получения уведомлений: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
     fun close() {
         client.close()
     }

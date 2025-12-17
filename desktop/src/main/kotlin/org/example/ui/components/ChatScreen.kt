@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -50,6 +51,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
     val error by viewModel.error.collectAsState()
     val responseFormat by viewModel.responseFormat.collectAsState()
     val collectionSettings by viewModel.collectionSettings.collectAsState()
+    val currentNotification by viewModel.currentNotification.collectAsState()
 
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -64,7 +66,8 @@ fun ChatScreen(viewModel: ChatViewModel) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
         // Toolbar
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -253,6 +256,40 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         else
                             MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
+                }
+            }
+        }
+        }
+
+        // Snackbar для уведомлений
+        currentNotification?.let { notification ->
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(16.dp)
+                    .fillMaxWidth(0.9f),
+                color = MaterialTheme.colorScheme.inverseSurface,
+                shape = RoundedCornerShape(8.dp),
+                shadowElevation = 8.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = notification,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.inverseOnSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    IconButton(onClick = { viewModel.dismissNotification() }) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Закрыть",
+                            tint = MaterialTheme.colorScheme.inverseOnSurface
+                        )
+                    }
                 }
             }
         }

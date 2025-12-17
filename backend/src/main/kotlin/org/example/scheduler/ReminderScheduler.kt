@@ -7,7 +7,7 @@ import org.example.model.LogLevel
 import org.slf4j.LoggerFactory
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Планировщик для автоматических уведомлений о напоминаниях
@@ -19,7 +19,7 @@ import kotlin.time.Duration.Companion.minutes
  */
 class ReminderScheduler(
     private val reminderRepository: ReminderRepository,
-    private val checkIntervalMinutes: Long = 5 // Проверять каждые 5 минут
+    private val checkIntervalSeconds: Long = 15 // Проверять каждые 15 секунд
 ) {
     private val logger = LoggerFactory.getLogger(ReminderScheduler::class.java)
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -37,7 +37,7 @@ class ReminderScheduler(
         }
 
         job = scope.launch {
-            logger.info("🔔 Планировщик напоминаний запущен (интервал: $checkIntervalMinutes мин)")
+            logger.info("🔔 Планировщик напоминаний запущен (интервал: $checkIntervalSeconds сек)")
             ServerLogger.logSystem("Планировщик напоминаний запущен", LogLevel.INFO)
 
             while (isActive) {
@@ -47,7 +47,7 @@ class ReminderScheduler(
                     logger.error("Ошибка при проверке напоминаний", e)
                 }
 
-                delay(checkIntervalMinutes.minutes)
+                delay(checkIntervalSeconds.seconds)
             }
         }
     }
