@@ -162,6 +162,43 @@ class McpViewModel {
 
                 _servers.add(weatherServerInfo)
 
+                // Добавляем Reminder MCP сервер (планировщик задач)
+                val reminderServerInfo = McpServerInfo(
+                    id = "reminder-mcp-server",
+                    name = "Reminder MCP Server (Планировщик)",
+                    version = "1.0.0",
+                    status = McpConnectionStatus.CONNECTED,
+                    tools = listOf(
+                        McpTool(
+                            "reminder_add",
+                            "Создать новое напоминание с датой и временем",
+                            """{"title": "string", "description": "string?", "reminder_time": "ISO-8601 datetime"}"""
+                        ),
+                        McpTool(
+                            "reminder_list",
+                            "Показать список напоминаний (по умолчанию все активные)",
+                            """{"filter": "all|pending|completed (default: pending)"}"""
+                        ),
+                        McpTool(
+                            "reminder_complete",
+                            "Пометить напоминание как выполненное",
+                            """{"reminder_id": "string"}"""
+                        ),
+                        McpTool(
+                            "reminder_delete",
+                            "Удалить напоминание",
+                            """{"reminder_id": "string"}"""
+                        ),
+                        McpTool(
+                            "reminder_get_summary",
+                            "Получить сводку: всего, просрочено, на сегодня, ближайшие",
+                            """{}"""
+                        )
+                    )
+                )
+
+                _servers.add(reminderServerInfo)
+
             } catch (e: Exception) {
                 println("Ошибка создания демо сервера: ${e.message}")
                 e.printStackTrace()

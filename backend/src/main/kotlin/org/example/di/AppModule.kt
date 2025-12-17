@@ -15,7 +15,9 @@ import org.example.data.InMemoryConversationRepository
 import org.example.data.LLMClient
 import org.example.data.PostgresConversationRepository
 import org.example.data.RedisConversationRepository
+import org.example.data.ReminderRepository
 import org.example.integrations.WeatherMcpClient
+import org.example.scheduler.ReminderScheduler
 import org.example.tools.McpToolsAdapter
 import org.example.tools.core.ToolRegistry
 import org.jetbrains.exposed.sql.Database
@@ -181,17 +183,31 @@ fun appModule(
         }
     }
 
+    // Reminder Repository
+    single {
+        val storageFile = java.io.File("reminders.json")
+        ReminderRepository(storageFile)
+    }
+
+    // Reminder Scheduler
+    single {
+        val repository: ReminderRepository = get()
+        ReminderScheduler(repository, checkIntervalMinutes = 5)
+    }
+
     // MCP Tools Adapter
     single {
         val trackerToken = System.getenv("YANDEX_TRACKER_TOKEN")
         val trackerOrgId = System.getenv("YANDEX_TRACKER_ORG_ID")
         val weatherClient: WeatherMcpClient? = get()
+        val reminderRepository: ReminderRepository = get()
 
         McpToolsAdapter(
             httpClient = get(),
             trackerToken = trackerToken,
             trackerOrgId = trackerOrgId,
-            weatherMcpClient = weatherClient
+            weatherMcpClient = weatherClient,
+            reminderRepository = reminderRepository
         )
     }
 

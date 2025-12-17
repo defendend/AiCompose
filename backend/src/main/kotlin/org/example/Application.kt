@@ -42,6 +42,7 @@ fun main() {
     embeddedServer(Netty, port = 8080, host = "0.0.0.0") {
         configureKoin(apiKey)
         configureMcpTools()
+        startReminderScheduler()
         configurePlugins()
         configureRouting()
     }.start(wait = true)
@@ -95,6 +96,21 @@ fun Application.configureMcpTools() {
             logger.error("❌ Ошибка при инициализации MCP инструментов", e)
             // Не бросаем исключение, чтобы сервер мог запуститься без MCP
         }
+    }
+}
+
+/**
+ * Запуск планировщика напоминаний
+ */
+fun Application.startReminderScheduler() {
+    val logger = LoggerFactory.getLogger("Application")
+
+    try {
+        val scheduler = getKoin().get<org.example.scheduler.ReminderScheduler>()
+        scheduler.start()
+        logger.info("✅ Планировщик напоминаний запущен")
+    } catch (e: Exception) {
+        logger.error("❌ Ошибка при запуске планировщика напоминаний", e)
     }
 }
 
