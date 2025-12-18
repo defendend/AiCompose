@@ -163,11 +163,18 @@ class ToolsTest {
     fun `ToolRegistry returns all tools`() {
         val tools = ToolRegistry.getAllTools()
 
-        assertEquals(4, tools.size)
+        assertEquals(8, tools.size) // 4 исторических + 3 pipeline + 1 системный
+        // Исторические инструменты
         assertTrue(tools.any { it.function.name == "get_historical_events" })
         assertTrue(tools.any { it.function.name == "get_historical_figure" })
         assertTrue(tools.any { it.function.name == "compare_eras" })
         assertTrue(tools.any { it.function.name == "get_historical_quote" })
+        // Pipeline инструменты
+        assertTrue(tools.any { it.function.name == "pipeline_search_docs" })
+        assertTrue(tools.any { it.function.name == "pipeline_summarize" })
+        assertTrue(tools.any { it.function.name == "pipeline_save_to_file" })
+        // Системные инструменты
+        assertTrue(tools.any { it.function.name == "get_current_time" })
     }
 
     @Test

@@ -44,10 +44,10 @@ class ToolRegistryTest {
     }
 
     @Test
-    fun `getAllTools returns 4 built-in tools after initialization`() {
+    fun `getAllTools returns 8 built-in tools after initialization`() {
         val tools = ToolRegistry.getAllTools()
 
-        assertEquals(4, tools.size)
+        assertEquals(8, tools.size) // 4 исторических + 3 pipeline + 1 системный
     }
 
     @Test
@@ -223,7 +223,7 @@ class ToolRegistryTest {
 
         // После reset нужна реинициализация
         ToolRegistry.initialize()
-        assertEquals(4, ToolRegistry.size()) // Только built-in
+        assertEquals(8, ToolRegistry.size()) // Только built-in (4 исторических + 3 pipeline + 1 системный)
     }
 
     // === Тесты автоматической инициализации ===

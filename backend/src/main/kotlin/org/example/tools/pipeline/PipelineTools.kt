@@ -88,15 +88,33 @@ object PipelineSummarize : AnnotatedAgentTool() {
             return "❌ Ошибка: text не может быть пустым"
         }
 
-        // Простая суммаризация: берем первое предложение из каждого параграфа
+        // Простая суммаризация: умная обработка разных форматов текста
         val lines = text.split("\n").filter { it.isNotBlank() }
-        val summary = lines
-            .filter { !it.startsWith("🔍") && !it.startsWith("Найдено") }
-            .filter { it.contains("•") || it.contains("[") }
-            .take(5)
-            .joinToString("\n") {
-                it.replace("•", "→").trim()
-            }
+
+        // Фильтруем служебные строки (эмодзи заголовки, метаинформация)
+        val contentLines = lines.filter { line ->
+            !line.startsWith("🔍") &&
+            !line.startsWith("📝") &&
+            !line.startsWith("💾") &&
+            !line.startsWith("Найдено") &&
+            !line.startsWith("Исходный") &&
+            !line.startsWith("Итоговая") &&
+            !line.startsWith("Время:") &&
+            !line.startsWith("---") &&
+            !line.startsWith("Путь:") &&
+            !line.startsWith("Размер:")
+        }
+
+        // Создаём сводку: берём основной контент
+        val summary = if (contentLines.isEmpty()) {
+            // Если нет контентных строк, берём первые 500 символов исходного текста
+            text.take(500)
+        } else {
+            // Берём первые 5-10 строк контента (в зависимости от длины)
+            contentLines
+                .take(10)
+                .joinToString("\n") { it.replace("•", "→").trim() }
+        }
 
         val timestamp = Instant.now()
 

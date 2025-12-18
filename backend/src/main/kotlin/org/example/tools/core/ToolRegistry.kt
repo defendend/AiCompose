@@ -5,6 +5,9 @@ import org.example.tools.historical.CompareErasTool
 import org.example.tools.historical.HistoricalEventsTool
 import org.example.tools.historical.HistoricalFigureTool
 import org.example.tools.historical.HistoricalQuoteTool
+import org.example.tools.pipeline.PipelineSearchDocs
+import org.example.tools.pipeline.PipelineSummarize
+import org.example.tools.pipeline.PipelineSaveToFile
 import org.example.tools.system.CurrentTimeTool
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
@@ -59,6 +62,11 @@ object ToolRegistry {
         registerInternal(HistoricalFigureTool, source = "built-in")
         registerInternal(CompareErasTool, source = "built-in")
         registerInternal(HistoricalQuoteTool, source = "built-in")
+
+        // Pipeline инструменты (композиция)
+        registerInternal(PipelineSearchDocs, source = "built-in")
+        registerInternal(PipelineSummarize, source = "built-in")
+        registerInternal(PipelineSaveToFile, source = "built-in")
 
         // Системные инструменты
         registerInternal(CurrentTimeTool, source = "built-in")
