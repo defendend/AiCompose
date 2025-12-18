@@ -81,7 +81,7 @@ fun Application.configureMcpTools() {
                 logger.info("ℹ️  MCP сервер погоды недоступен")
             }
 
-            // Регистрируем MCP инструменты в ToolRegistry
+            // Регистрируем MCP инструменты в ToolRegistry (включая Pipeline)
             val mcpTools = mcpToolsAdapter.getTools()
             logger.info("📋 Регистрация ${mcpTools.size} MCP инструментов...")
             mcpTools.forEach { tool ->

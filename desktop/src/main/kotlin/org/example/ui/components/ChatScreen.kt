@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.example.model.CollectionModeTemplates
 import org.example.model.StructuredResponse
 import org.example.shared.model.ChatMessage
@@ -343,48 +344,52 @@ private fun MessageBubble(message: ChatMessage) {
                 )
             }
 
-            // Отображение вызова инструмента
+            // Отображение вызова инструмента (с красивой визуализацией для Pipeline)
             message.toolCall?.let { toolCall ->
                 Spacer(modifier = Modifier.height(8.dp))
-                Surface(
-                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        Text(
-                            text = "🔧 Инструмент: ${toolCall.name}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                        if (toolCall.arguments.isNotBlank()) {
+                if (toolCall.name.startsWith("pipeline_")) {
+                    PipelineToolCallView(toolCall, message.toolResult, textColor)
+                } else {
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) {
                             Text(
-                                text = toolCall.arguments,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = textColor.copy(alpha = 0.8f)
+                                text = "🔧 Инструмент: ${toolCall.name}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.secondary
                             )
+                            if (toolCall.arguments.isNotBlank()) {
+                                Text(
+                                    text = toolCall.arguments,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = textColor.copy(alpha = 0.8f)
+                                )
+                            }
                         }
                     }
-                }
-            }
 
-            // Отображение результата инструмента
-            message.toolResult?.let { result ->
-                Spacer(modifier = Modifier.height(8.dp))
-                Surface(
-                    color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        Text(
-                            text = "📋 Результат:",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.tertiary
-                        )
-                        Text(
-                            text = result.result,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = textColor.copy(alpha = 0.8f)
-                        )
+                    // Отображение результата для обычных инструментов
+                    message.toolResult?.let { result ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                Text(
+                                    text = "📋 Результат:",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.tertiary
+                                )
+                                Text(
+                                    text = result.result,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = textColor.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -517,6 +522,161 @@ private fun LoadingIndicator() {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Красивая визуализация Pipeline инструментов
+ */
+@Composable
+private fun PipelineToolCallView(
+    toolCall: org.example.shared.model.ToolCall,
+    toolResult: org.example.shared.model.ToolResult?,
+    textColor: androidx.compose.ui.graphics.Color
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+
+    Surface(
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            // Заголовок с иконкой и названием
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Иконка в зависимости от типа инструмента
+                val (icon, stepName, stepColor) = when (toolCall.name) {
+                    "pipeline_search_docs" -> Triple("🔍", "Поиск документов", MaterialTheme.colorScheme.primary)
+                    "pipeline_summarize" -> Triple("📝", "Суммаризация", MaterialTheme.colorScheme.secondary)
+                    "pipeline_save_to_file" -> Triple("💾", "Сохранение в файл", MaterialTheme.colorScheme.tertiary)
+                    else -> Triple("🔧", toolCall.name, MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                Text(
+                    text = icon,
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stepName,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = stepColor
+                    )
+                    Text(
+                        text = "Шаг пайплайна",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = textColor.copy(alpha = 0.6f)
+                    )
+                }
+
+                // Кнопка раскрытия деталей
+                TextButton(onClick = { isExpanded = !isExpanded }) {
+                    Text(
+                        text = if (isExpanded) "Скрыть ▲" else "Детали ▼",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+
+            // Входные параметры (всегда видны)
+            if (toolCall.arguments.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text(
+                            text = "📥 Входные параметры:",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = textColor.copy(alpha = 0.8f)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // Парсим JSON для красивого отображения
+                        val params = remember(toolCall.arguments) {
+                            try {
+                                val json = Json.parseToJsonElement(toolCall.arguments).jsonObject
+                                json.entries.associate { (key, value) ->
+                                    key to value.toString().removeSurrounding("\"")
+                                }
+                            } catch (e: Exception) {
+                                mapOf("raw" to toolCall.arguments)
+                            }
+                        }
+
+                        params.forEach { (key, value) ->
+                            Row(modifier = Modifier.padding(vertical = 2.dp)) {
+                                Text(
+                                    text = "$key: ",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = value,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = textColor.copy(alpha = 0.9f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Результат (раскрываемый)
+            toolResult?.let { result ->
+                if (isExpanded) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Text(
+                                text = "✅ Результат выполнения:",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = result.result,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = textColor.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
+                } else {
+                    // Показываем краткий превью результата
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "✅",
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                        Text(
+                            text = "Выполнено успешно",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
             }
         }
     }

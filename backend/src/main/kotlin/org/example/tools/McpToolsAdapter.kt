@@ -12,6 +12,9 @@ import org.example.model.FunctionDefinition
 import org.example.model.FunctionParameters
 import org.example.model.PropertyDefinition
 import org.example.model.Tool
+import org.example.tools.pipeline.PipelineSearchDocs
+import org.example.tools.pipeline.PipelineSummarize
+import org.example.tools.pipeline.PipelineSaveToFile
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -19,7 +22,7 @@ import java.time.format.DateTimeFormatter
 /**
  * Адаптер MCP инструментов для использования в Agent
  *
- * Предоставляет инструменты Яндекс.Трекера, погоды (Open-Meteo) и напоминаний как обычные AgentTool
+ * Предоставляет инструменты Яндекс.Трекера, погоды (Open-Meteo), напоминаний и pipeline как обычные AgentTool
  */
 class McpToolsAdapter(
     private val httpClient: HttpClient,
@@ -49,6 +52,11 @@ class McpToolsAdapter(
             add(WeatherGetDetails())
             add(WeatherGetAirQuality())
         }
+
+        // Инструменты пайплайна (композиция: search → summarize → save)
+        add(PipelineSearchDocs)
+        add(PipelineSummarize)
+        add(PipelineSaveToFile)
 
         // Инструменты напоминаний
         add(ReminderAdd())

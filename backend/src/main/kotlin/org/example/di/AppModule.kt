@@ -195,7 +195,7 @@ fun appModule(
         ReminderScheduler(repository, checkIntervalSeconds = 15)
     }
 
-    // MCP Tools Adapter
+    // MCP Tools Adapter (включает Pipeline инструменты)
     single {
         val trackerToken = System.getenv("YANDEX_TRACKER_TOKEN")
         val trackerOrgId = System.getenv("YANDEX_TRACKER_ORG_ID")
