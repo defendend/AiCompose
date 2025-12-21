@@ -1,6 +1,7 @@
 package org.example.tools.core
 
 import org.example.model.Tool
+import org.example.tools.docker.*
 import org.example.tools.historical.CompareErasTool
 import org.example.tools.historical.HistoricalEventsTool
 import org.example.tools.historical.HistoricalFigureTool
@@ -67,6 +68,13 @@ object ToolRegistry {
         registerInternal(PipelineSearchDocs, source = "built-in")
         registerInternal(PipelineSummarize, source = "built-in")
         registerInternal(PipelineSaveToFile, source = "built-in")
+
+        // Docker инструменты (управление окружением)
+        registerInternal(DockerRunTool, source = "built-in")
+        registerInternal(DockerExecTool, source = "built-in")
+        registerInternal(DockerLogsTool, source = "built-in")
+        registerInternal(DockerStopTool, source = "built-in")
+        registerInternal(DockerPsTool, source = "built-in")
 
         // Системные инструменты
         registerInternal(CurrentTimeTool, source = "built-in")

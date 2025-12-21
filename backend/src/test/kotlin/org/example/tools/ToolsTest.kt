@@ -163,7 +163,7 @@ class ToolsTest {
     fun `ToolRegistry returns all tools`() {
         val tools = ToolRegistry.getAllTools()
 
-        assertEquals(8, tools.size) // 4 исторических + 3 pipeline + 1 системный
+        assertEquals(13, tools.size) // 4 исторических + 3 pipeline + 5 docker + 1 системный
         // Исторические инструменты
         assertTrue(tools.any { it.function.name == "get_historical_events" })
         assertTrue(tools.any { it.function.name == "get_historical_figure" })
@@ -173,6 +173,12 @@ class ToolsTest {
         assertTrue(tools.any { it.function.name == "pipeline_search_docs" })
         assertTrue(tools.any { it.function.name == "pipeline_summarize" })
         assertTrue(tools.any { it.function.name == "pipeline_save_to_file" })
+        // Docker инструменты
+        assertTrue(tools.any { it.function.name == "docker_run" })
+        assertTrue(tools.any { it.function.name == "docker_exec" })
+        assertTrue(tools.any { it.function.name == "docker_logs" })
+        assertTrue(tools.any { it.function.name == "docker_stop" })
+        assertTrue(tools.any { it.function.name == "docker_ps" })
         // Системные инструменты
         assertTrue(tools.any { it.function.name == "get_current_time" })
     }
