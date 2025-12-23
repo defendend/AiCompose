@@ -4,59 +4,76 @@
 
 ### Подготовка
 
-1. **Создать тестовые документы на сервере**
-   ```bash
-   ssh defendend@89.169.190.22
-   mkdir -p /opt/aicompose/demo_docs
-   ```
+**Автоматическая подготовка (рекомендуется):**
 
-2. **Создать 3 файла с контентом:**
-
-   **`/opt/aicompose/demo_docs/docker.md`**
-   ```markdown
-   # Docker Инструменты
-
-   Docker позволяет агенту управлять контейнерами:
-   - docker_run - запуск контейнеров (nginx, postgres, redis)
-   - docker_exec - выполнение команд внутри контейнера
-   - docker_logs - просмотр логов контейнера
-   - docker_stop - остановка и удаление контейнера
-   - docker_ps - список запущенных контейнеров
-
-   Агент может запустить nginx на любом порту и проверить его работу.
-   ```
-
-   **`/opt/aicompose/demo_docs/rag.md`**
-   ```markdown
-   # RAG Система
-
-   RAG (Retrieval-Augmented Generation) позволяет агенту работать с документами:
-   - Индексация документов с разбивкой на чанки по 500 символов
-   - Генерация TF-IDF эмбеддингов (локально, без внешних API)
-   - Семантический поиск по косинусному сходству векторов
-   - Сохранение индекса в JSON формате
-
-   Поддерживаются форматы: md, txt, kt, java, js, py, ts.
-   ```
-
-   **`/opt/aicompose/demo_docs/history.md`**
-   ```markdown
-   # Исторические Инструменты
-
-   Профессор Архивариус знает историю:
-   - get_historical_events - события по годам (1945, 1961, 1991)
-   - get_historical_figure - биографии великих людей (Наполеон, Цезарь, Клеопатра)
-   - compare_eras - сравнение исторических эпох (античность, средневековье)
-   - get_historical_quote - цитаты великих людей
-
-   Агент рассказывает живо, с деталями и анекдотами из истории.
-   ```
-
-3. **Запустить Desktop приложение**
+1. **Запустить скрипт подготовки**
    ```bash
    cd /Users/defendend/horobot/AiCompose
+   ./scripts/setup_rag_demo.sh
+   ```
+
+   Скрипт автоматически:
+   - Создаёт `/opt/aicompose/demo_docs/` на сервере
+   - Генерирует 3 тестовых документа (docker.md, rag.md, history.md)
+   - Устанавливает правильные права (aicompose:aicompose)
+   - Проверяет результат
+
+2. **Запустить Desktop приложение**
+   ```bash
    ./gradlew :desktop:run
    ```
+
+**Созданные документы:**
+- `docker.md` (1.2 KB) - Docker инструменты с примерами
+- `rag.md` (1.8 KB) - RAG система, архитектура, параметры
+- `history.md` (2.1 KB) - Исторические инструменты агента
+
+---
+
+<details>
+<summary><b>Ручная подготовка (если скрипт не работает)</b></summary>
+
+```bash
+ssh defendend@89.169.190.22
+
+# Создать директорию
+sudo mkdir -p /opt/aicompose/demo_docs
+
+# Docker документ
+sudo tee /opt/aicompose/demo_docs/docker.md > /dev/null << 'EOF'
+# Docker Инструменты
+Docker позволяет агенту управлять контейнерами:
+- docker_run - запуск контейнеров (nginx, postgres, redis)
+- docker_exec - выполнение команд
+- docker_logs - просмотр логов
+- docker_stop - остановка
+- docker_ps - список контейнеров
+EOF
+
+# RAG документ
+sudo tee /opt/aicompose/demo_docs/rag.md > /dev/null << 'EOF'
+# RAG Система
+RAG (Retrieval-Augmented Generation):
+- Индексация документов (чанки 500 символов)
+- TF-IDF эмбеддинги (локально)
+- Семантический поиск (косинусное сходство)
+- JSON хранение
+EOF
+
+# History документ
+sudo tee /opt/aicompose/demo_docs/history.md > /dev/null << 'EOF'
+# Исторические Инструменты
+Профессор Архивариус знает историю:
+- get_historical_events - события по годам
+- get_historical_figure - биографии великих
+- compare_eras - сравнение эпох
+- get_historical_quote - цитаты
+EOF
+
+# Установить права
+sudo chown -R aicompose:aicompose /opt/aicompose/demo_docs
+```
+</details>
 
 ---
 
