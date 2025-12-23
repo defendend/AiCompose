@@ -9,6 +9,7 @@ import org.example.tools.historical.HistoricalQuoteTool
 import org.example.tools.pipeline.PipelineSearchDocs
 import org.example.tools.pipeline.PipelineSummarize
 import org.example.tools.pipeline.PipelineSaveToFile
+import org.example.tools.rag.*
 import org.example.tools.system.CurrentTimeTool
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
@@ -75,6 +76,11 @@ object ToolRegistry {
         registerInternal(DockerLogsTool, source = "built-in")
         registerInternal(DockerStopTool, source = "built-in")
         registerInternal(DockerPsTool, source = "built-in")
+
+        // RAG инструменты (векторный поиск по документам)
+        registerInternal(RagIndexDocuments, source = "built-in")
+        registerInternal(RagSearch, source = "built-in")
+        registerInternal(RagIndexInfo, source = "built-in")
 
         // Системные инструменты
         registerInternal(CurrentTimeTool, source = "built-in")
