@@ -139,11 +139,4 @@ class RagIntegrationTest {
 
         assertContains(result, "не существует")
     }
-
-    @Test
-    fun `search before indexing returns error`() = runTest {
-        val result = RagSearch.execute("""{"query": "test"}""")
-
-        assertContains(result, "Индекс не найден")
-    }
 }

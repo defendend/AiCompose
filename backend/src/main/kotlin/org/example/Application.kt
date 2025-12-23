@@ -15,6 +15,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.coroutines.runBlocking
 import org.example.agent.Agent
 import org.example.api.chatRoutes
+import org.example.api.toolRoutes
 import org.example.data.ConversationRepository
 import org.example.data.LLMClient
 import org.example.di.appModule
@@ -164,5 +165,6 @@ fun Application.configureRouting() {
 
     routing {
         chatRoutes(agent, llmClient, conversationRepository, reminderRepository)
+        toolRoutes()  // Прямой вызов инструментов (для тестирования и демо)
     }
 }
