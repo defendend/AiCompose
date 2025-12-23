@@ -163,7 +163,7 @@ class ToolsTest {
     fun `ToolRegistry returns all tools`() {
         val tools = ToolRegistry.getAllTools()
 
-        assertEquals(16, tools.size) // 4 исторических + 3 pipeline + 5 docker + 3 rag + 1 системный
+        assertEquals(18, tools.size) // 4 исторических + 3 pipeline + 5 docker + 5 rag + 1 системный
         // Исторические инструменты
         assertTrue(tools.any { it.function.name == "get_historical_events" })
         assertTrue(tools.any { it.function.name == "get_historical_figure" })

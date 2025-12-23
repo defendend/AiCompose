@@ -12,7 +12,7 @@ import java.io.File
  * Глобальный индекс документов
  * В продакшене лучше использовать DI, но для демо подойдет
  */
-private val globalIndex = DocumentIndex()
+internal val globalIndex = DocumentIndex()
 
 /**
  * Инструмент 1: Индексация документов

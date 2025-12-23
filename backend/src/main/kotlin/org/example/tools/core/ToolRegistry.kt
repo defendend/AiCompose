@@ -81,6 +81,8 @@ object ToolRegistry {
         registerInternal(RagIndexDocuments, source = "built-in")
         registerInternal(RagSearch, source = "built-in")
         registerInternal(RagIndexInfo, source = "built-in")
+        registerInternal(org.example.tools.rag.AskWithRagTool, source = "built-in")
+        registerInternal(org.example.tools.rag.CompareRagAnswersTool, source = "built-in")
 
         // Системные инструменты
         registerInternal(CurrentTimeTool, source = "built-in")
