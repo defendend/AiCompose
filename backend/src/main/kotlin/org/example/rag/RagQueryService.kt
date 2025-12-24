@@ -27,17 +27,24 @@ class RagQueryService(
 
     /**
      * Запрос С RAG: поиск релевантных чанков + LLM.
+     *
+     * @param question Вопрос пользователя
+     * @param topK Количество релевантных фрагментов (по умолчанию 3)
+     * @param minRelevance Минимальный порог релевантности 0.0-1.0 (опционально)
+     * @param systemPrompt Системный промпт для LLM
+     * @return Результат RAG запроса с метаданными
      */
     suspend fun queryWithRag(
         question: String,
         topK: Int = 3,
+        minRelevance: Float? = null,
         systemPrompt: String = "Ты полезный AI ассистент. Отвечай на вопросы на основе предоставленного контекста."
     ): RagQueryResult {
-        logger.info("RAG запрос: $question (topK=$topK)")
+        logger.info("RAG запрос: $question (topK=$topK, minRelevance=$minRelevance)")
 
-        // 1. Поиск релевантных чанков
+        // 1. Поиск релевантных чанков с фильтрацией
         val searchResults = if (index.size() > 0) {
-            index.search(question, topK)
+            index.search(question, topK, minRelevance)
         } else {
             logger.warn("Индекс пуст, пропускаем поиск")
             emptyList()
@@ -153,21 +160,56 @@ class RagQueryService(
 
     /**
      * Сравнение ответов с RAG и без RAG.
+     *
+     * @param question Вопрос для сравнения
+     * @param topK Количество релевантных фрагментов
+     * @param minRelevance Минимальный порог релевантности (опционально)
+     * @return Результат сравнения
      */
     suspend fun compareAnswers(
         question: String,
-        topK: Int = 3
+        topK: Int = 3,
+        minRelevance: Float? = null
     ): RagComparisonResult {
-        logger.info("Сравнение ответов для вопроса: $question")
+        logger.info("Сравнение ответов для вопроса: $question (minRelevance=$minRelevance)")
 
         val withoutRag = queryWithoutRag(question)
-        val withRag = queryWithRag(question, topK)
+        val withRag = queryWithRag(question, topK, minRelevance)
 
         return RagComparisonResult(
             question = question,
             withoutRag = withoutRag,
             withRag = withRag,
             totalDurationMs = withoutRag.durationMs + withRag.durationMs
+        )
+    }
+
+    /**
+     * Сравнение ответов с RAG: без фильтрации vs с фильтрацией.
+     *
+     * @param question Вопрос для сравнения
+     * @param topK Количество релевантных фрагментов
+     * @param minRelevance Минимальный порог релевантности для фильтрации
+     * @return Результат сравнения трёх режимов
+     */
+    suspend fun compareWithReranking(
+        question: String,
+        topK: Int = 3,
+        minRelevance: Float = 0.3f
+    ): RerankComparisonResult {
+        logger.info("Сравнение с реранкингом: $question (threshold=$minRelevance)")
+
+        val withoutRag = queryWithoutRag(question)
+        val withRagNoFilter = queryWithRag(question, topK, minRelevance = null)
+        val withRagFiltered = queryWithRag(question, topK, minRelevance)
+
+        return RerankComparisonResult(
+            question = question,
+            withoutRag = withoutRag,
+            withRagNoFilter = withRagNoFilter,
+            withRagFiltered = withRagFiltered,
+            threshold = minRelevance,
+            totalDurationMs = withoutRag.durationMs + withRagNoFilter.durationMs + withRagFiltered.durationMs
         )
     }
 }
@@ -196,5 +238,18 @@ data class RagComparisonResult(
     val question: String,
     val withoutRag: RagQueryResult,
     val withRag: RagQueryResult,
+    val totalDurationMs: Long
+)
+
+/**
+ * Результат сравнения с реранкингом (три режима).
+ */
+@Serializable
+data class RerankComparisonResult(
+    val question: String,
+    val withoutRag: RagQueryResult,
+    val withRagNoFilter: RagQueryResult,
+    val withRagFiltered: RagQueryResult,
+    val threshold: Float,
     val totalDurationMs: Long
 )

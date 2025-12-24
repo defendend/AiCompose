@@ -76,8 +76,13 @@ class DocumentIndex(
 
     /**
      * Поиск по запросу
+     *
+     * @param query Поисковый запрос
+     * @param topK Количество результатов (по умолчанию 5)
+     * @param minRelevance Минимальный порог релевантности 0.0-1.0 (опционально)
+     * @return Список результатов, отсортированных по релевантности
      */
-    fun search(query: String, topK: Int = 5): List<SearchResult> {
+    fun search(query: String, topK: Int = 5, minRelevance: Float? = null): List<SearchResult> {
         if (index.isEmpty()) {
             return emptyList()
         }
@@ -100,8 +105,15 @@ class DocumentIndex(
             )
         }
 
+        // Фильтруем по минимальной релевантности (если указан порог)
+        val filtered = if (minRelevance != null && minRelevance > 0.0f) {
+            results.filter { it.score >= minRelevance }
+        } else {
+            results
+        }
+
         // Возвращаем топ-K наиболее похожих
-        return results
+        return filtered
             .sortedByDescending { it.score }
             .take(topK)
     }
