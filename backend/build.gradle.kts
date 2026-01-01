@@ -88,3 +88,21 @@ tasks.register<JavaExec>("runMcpDemo") {
     mainClass.set("org.example.mcp.McpDemoKt")
     classpath = sourceSets["main"].runtimeClasspath
 }
+
+// Task для запуска RAG Chat демонстрации
+tasks.register<JavaExec>("runRagChat") {
+    group = "application"
+    description = "Run RAG Chat Bot CLI"
+    mainClass.set("org.example.demo.RagChatDemoKt")
+    classpath = sourceSets["main"].runtimeClasspath
+    standardInput = System.`in`
+}
+
+// Task для запуска RAG Chat через удалённый сервер (без локального API ключа)
+tasks.register<JavaExec>("runRagChatRemote") {
+    group = "application"
+    description = "Run RAG Chat Bot CLI via remote server (no local API key needed)"
+    mainClass.set("org.example.demo.RagChatRemoteDemoKt")
+    classpath = sourceSets["main"].runtimeClasspath
+    standardInput = System.`in`
+}
