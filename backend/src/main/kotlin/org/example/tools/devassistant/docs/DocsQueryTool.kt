@@ -29,13 +29,13 @@ import org.koin.core.component.inject
 )
 @Param(
     name = "top_k",
-    description = "Количество фрагментов для контекста (по умолчанию: 5)",
+    description = "Количество фрагментов для контекста (по умолчанию: 8)",
     type = "integer",
     required = false
 )
 @Param(
     name = "min_relevance",
-    description = "Минимальная релевантность 0.0-1.0 (по умолчанию: 0.2)",
+    description = "Минимальная релевантность 0.0-1.0 (по умолчанию: 0.1)",
     type = "number",
     required = false
 )
@@ -52,9 +52,11 @@ object DocsQueryTool : AnnotatedAgentTool(), KoinComponent {
         val json = Json.parseToJsonElement(arguments).jsonObject
         val question = json["question"]?.jsonPrimitive?.content
             ?: return "❌ Ошибка: question не может быть пустым"
-        val topK = json["top_k"]?.jsonPrimitive?.intOrNull ?: 5
-        val minRelevance = json["min_relevance"]?.jsonPrimitive?.floatOrNull ?: 0.2f
-        val path = json["path"]?.jsonPrimitive?.content ?: "."
+        val topK = json["top_k"]?.jsonPrimitive?.intOrNull ?: 8
+        val minRelevance = json["min_relevance"]?.jsonPrimitive?.floatOrNull ?: 0.1f
+        val path = json["path"]?.jsonPrimitive?.content
+            ?: System.getenv("PROJECT_PATH")
+            ?: "."
 
         // Проверяем/создаём индекс
         if (globalDocsIndex == null || globalDocsIndex!!.projectPath != path) {

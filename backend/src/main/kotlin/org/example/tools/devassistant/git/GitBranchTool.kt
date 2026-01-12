@@ -31,7 +31,9 @@ object GitBranchTool : GitToolBase() {
     override suspend fun execute(arguments: String): String {
         val json = Json.parseToJsonElement(arguments).jsonObject
         val listAll = json["list_all"]?.jsonPrimitive?.booleanOrNull ?: false
-        val path = json["path"]?.jsonPrimitive?.content ?: "."
+        val path = json["path"]?.jsonPrimitive?.content
+            ?: System.getenv("PROJECT_PATH")
+            ?: "."
 
         // Получаем текущую ветку
         val currentBranchResult = runGitCommand("rev-parse", "--abbrev-ref", "HEAD", workDir = path)

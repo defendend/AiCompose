@@ -29,7 +29,9 @@ object DocsIndexTool : AnnotatedAgentTool() {
 
     override suspend fun execute(arguments: String): String {
         val json = Json.parseToJsonElement(arguments).jsonObject
-        val path = json["path"]?.jsonPrimitive?.content ?: "."
+        val path = json["path"]?.jsonPrimitive?.content
+            ?: System.getenv("PROJECT_PATH")
+            ?: "."
 
         // Создаём или обновляем глобальный индекс
         globalDocsIndex = DocsIndex(path)

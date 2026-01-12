@@ -24,7 +24,9 @@ object GitStatusTool : GitToolBase() {
 
     override suspend fun execute(arguments: String): String {
         val json = Json.parseToJsonElement(arguments).jsonObject
-        val path = json["path"]?.jsonPrimitive?.content ?: "."
+        val path = json["path"]?.jsonPrimitive?.content
+            ?: System.getenv("PROJECT_PATH")
+            ?: "."
 
         val result = runGitCommand("status", "--porcelain=v2", "--branch", workDir = path)
 

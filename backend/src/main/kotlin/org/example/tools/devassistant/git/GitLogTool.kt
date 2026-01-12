@@ -45,7 +45,9 @@ object GitLogTool : GitToolBase() {
         val json = Json.parseToJsonElement(arguments).jsonObject
         val limit = json["limit"]?.jsonPrimitive?.intOrNull ?: 10
         val oneline = json["oneline"]?.jsonPrimitive?.booleanOrNull ?: false
-        val path = json["path"]?.jsonPrimitive?.content ?: "."
+        val path = json["path"]?.jsonPrimitive?.content
+            ?: System.getenv("PROJECT_PATH")
+            ?: "."
         val file = json["file"]?.jsonPrimitive?.content
 
         val args = mutableListOf("log", "-n", limit.toString())

@@ -37,7 +37,9 @@ object GitFilesTool : GitToolBase() {
     override suspend fun execute(arguments: String): String {
         val json = Json.parseToJsonElement(arguments).jsonObject
         val modifiedOnly = json["modified_only"]?.jsonPrimitive?.booleanOrNull ?: false
-        val path = json["path"]?.jsonPrimitive?.content ?: "."
+        val path = json["path"]?.jsonPrimitive?.content
+            ?: System.getenv("PROJECT_PATH")
+            ?: "."
         val pattern = json["pattern"]?.jsonPrimitive?.content
 
         val result = if (modifiedOnly) {

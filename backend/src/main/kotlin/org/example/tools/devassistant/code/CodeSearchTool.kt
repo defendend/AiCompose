@@ -65,7 +65,9 @@ object CodeSearchTool : AnnotatedAgentTool() {
         val pattern = json["pattern"]?.jsonPrimitive?.content
             ?: return "❌ Ошибка: pattern не может быть пустым"
         val filePattern = json["file_pattern"]?.jsonPrimitive?.content
-        val path = json["path"]?.jsonPrimitive?.content ?: "."
+        val path = json["path"]?.jsonPrimitive?.content
+            ?: System.getenv("PROJECT_PATH")
+            ?: "."
         val maxResults = json["max_results"]?.jsonPrimitive?.intOrNull ?: 30
         val contextLines = json["context_lines"]?.jsonPrimitive?.intOrNull ?: 0
 

@@ -52,7 +52,9 @@ object ProjectStructureTool : AnnotatedAgentTool() {
 
     override suspend fun execute(arguments: String): String {
         val json = Json.parseToJsonElement(arguments).jsonObject
-        val path = json["path"]?.jsonPrimitive?.content ?: "."
+        val path = json["path"]?.jsonPrimitive?.content
+            ?: System.getenv("PROJECT_PATH")
+            ?: "."
         val depth = json["depth"]?.jsonPrimitive?.intOrNull ?: 3
         val showFiles = json["show_files"]?.jsonPrimitive?.booleanOrNull ?: true
         val showHidden = json["show_hidden"]?.jsonPrimitive?.booleanOrNull ?: false

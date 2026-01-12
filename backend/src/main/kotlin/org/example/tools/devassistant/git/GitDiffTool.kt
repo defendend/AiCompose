@@ -44,7 +44,9 @@ object GitDiffTool : GitToolBase() {
         val json = Json.parseToJsonElement(arguments).jsonObject
         val staged = json["staged"]?.jsonPrimitive?.booleanOrNull ?: false
         val file = json["file"]?.jsonPrimitive?.content
-        val path = json["path"]?.jsonPrimitive?.content ?: "."
+        val path = json["path"]?.jsonPrimitive?.content
+            ?: System.getenv("PROJECT_PATH")
+            ?: "."
         val stat = json["stat"]?.jsonPrimitive?.booleanOrNull ?: false
 
         val args = mutableListOf("diff")
