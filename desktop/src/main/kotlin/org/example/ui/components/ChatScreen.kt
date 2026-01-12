@@ -62,7 +62,9 @@ fun ChatScreen(viewModel: ChatViewModel) {
         if (messages.isNotEmpty() || streamingContent.isNotEmpty()) {
             val targetIndex = if (isStreaming) messages.size else messages.size - 1
             if (targetIndex >= 0) {
-                listState.animateScrollToItem(targetIndex.coerceAtLeast(0))
+                // При стриминге используем большой offset чтобы показать низ сообщения
+                val scrollOffset = if (isStreaming) 100000 else 0
+                listState.animateScrollToItem(targetIndex.coerceAtLeast(0), scrollOffset)
             }
         }
     }

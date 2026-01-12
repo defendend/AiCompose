@@ -348,6 +348,14 @@ class Agent(
                                 messageId = messageId
                             ))
 
+                            // Отправляем PROCESSING перед выполнением инструмента (heartbeat)
+                            send(StreamEvent(
+                                type = StreamEventType.PROCESSING,
+                                content = "Выполняется: ${toolCall.function.name}",
+                                conversationId = conversationId,
+                                messageId = messageId
+                            ))
+
                             val result = ToolRegistry.executeTool(toolCall.function.name, toolCall.function.arguments)
 
                             send(StreamEvent(
@@ -378,6 +386,46 @@ class Agent(
                         ))
                     }
                     continueLoop = false
+                }
+            }
+
+            // Если достигли лимита итераций, делаем финальный вызов БЕЗ инструментов
+            if (iterations >= maxToolIterations) {
+                send(StreamEvent(
+                    type = StreamEventType.PROCESSING,
+                    content = "Формирование итогового ответа...",
+                    conversationId = conversationId,
+                    messageId = messageId
+                ))
+
+                // Добавляем инструкцию для подведения итогов
+                conversationRepository.addMessage(conversationId, LLMMessage(
+                    role = "user",
+                    content = "На основе всей собранной информации выше, дай краткий структурированный ответ на мой вопрос. Не вызывай больше инструменты, просто подведи итог."
+                ))
+
+                val history = conversationRepository.getHistory(conversationId)
+                val finalContentBuffer = StringBuilder()
+
+                // Вызываем LLM без инструментов для финального ответа
+                llmClient.chatStream(history, emptyList(), temperature, conversationId).collect { chunk ->
+                    val choice = chunk.choices.firstOrNull() ?: return@collect
+                    choice.delta?.content?.let { content ->
+                        finalContentBuffer.append(content)
+                        send(StreamEvent(
+                            type = StreamEventType.CONTENT,
+                            content = content,
+                            conversationId = conversationId,
+                            messageId = messageId
+                        ))
+                    }
+                }
+
+                if (finalContentBuffer.isNotEmpty()) {
+                    conversationRepository.addMessage(conversationId, LLMMessage(
+                        role = "assistant",
+                        content = finalContentBuffer.toString()
+                    ))
                 }
             }
 

@@ -169,6 +169,13 @@ class ChatViewModel(
                                 AppLogger.info("ChatViewModel", "Результат инструмента получен")
                             }
 
+                            StreamEventType.PROCESSING -> {
+                                // Heartbeat для поддержания соединения
+                                event.content?.let { content ->
+                                    AppLogger.info("ChatViewModel", "Обработка: $content")
+                                }
+                            }
+
                             StreamEventType.DONE -> {
                                 // Добавляем финальное сообщение в список
                                 val assistantMessage = ChatMessage(

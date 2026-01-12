@@ -45,13 +45,17 @@ class ChatApiClient(
     }
 
     private val client = HttpClient(CIO) {
+        engine {
+            // Отключаем engine-level таймаут, используем только HttpTimeout plugin
+            requestTimeout = 0
+        }
         install(ContentNegotiation) {
             json(jsonParser)
         }
         install(HttpTimeout) {
-            requestTimeoutMillis = 180000  // 3 минуты для сложных запросов (группа экспертов)
-            connectTimeoutMillis = 10000
-            socketTimeoutMillis = 180000
+            requestTimeoutMillis = 300000  // 5 минут для streaming с tool calls
+            connectTimeoutMillis = 15000
+            socketTimeoutMillis = 300000   // 5 минут для ожидания данных
         }
     }
 

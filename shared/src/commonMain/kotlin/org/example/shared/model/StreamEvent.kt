@@ -18,6 +18,8 @@ enum class StreamEventType {
     TOOL_CALL,
     /** Результат выполнения инструмента */
     TOOL_RESULT,
+    /** Выполняется обработка (heartbeat для поддержания соединения) */
+    PROCESSING,
     /** Завершение стриминга */
     DONE,
     /** Ошибка */
