@@ -1,6 +1,15 @@
 package org.example.tools.core
 
 import org.example.model.Tool
+import org.example.tools.devassistant.code.CodeSearchTool
+import org.example.tools.devassistant.code.FileReadTool
+import org.example.tools.devassistant.code.ProjectDependenciesTool
+import org.example.tools.devassistant.code.ProjectStructureTool
+import org.example.tools.devassistant.ide.*
+import org.example.tools.devassistant.docs.DocsIndexTool
+import org.example.tools.devassistant.docs.DocsQueryTool
+import org.example.tools.devassistant.docs.DocsSearchTool
+import org.example.tools.devassistant.git.*
 import org.example.tools.docker.*
 import org.example.tools.historical.CompareErasTool
 import org.example.tools.historical.HistoricalEventsTool
@@ -87,6 +96,30 @@ object ToolRegistry {
 
         // Системные инструменты
         registerInternal(CurrentTimeTool, source = "built-in")
+
+        // DevAssistant - Git инструменты
+        registerInternal(GitStatusTool, source = "built-in")
+        registerInternal(GitBranchTool, source = "built-in")
+        registerInternal(GitLogTool, source = "built-in")
+        registerInternal(GitDiffTool, source = "built-in")
+        registerInternal(GitFilesTool, source = "built-in")
+
+        // DevAssistant - Docs RAG инструменты
+        registerInternal(DocsIndexTool, source = "built-in")
+        registerInternal(DocsSearchTool, source = "built-in")
+        registerInternal(DocsQueryTool, source = "built-in")
+
+        // DevAssistant - Code инструменты
+        registerInternal(CodeSearchTool, source = "built-in")
+        registerInternal(FileReadTool, source = "built-in")
+        registerInternal(ProjectStructureTool, source = "built-in")
+        registerInternal(ProjectDependenciesTool, source = "built-in")
+
+        // DevAssistant - IDE интеграция
+        registerInternal(IdeSetContextTool, source = "built-in")
+        registerInternal(IdeGetContextTool, source = "built-in")
+        registerInternal(IdeReadCurrentTool, source = "built-in")
+        registerInternal(IdeClearContextTool, source = "built-in")
     }
 
     /**

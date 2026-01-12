@@ -24,6 +24,8 @@ import org.example.logging.ServerLogger
 import org.example.model.LogLevel
 import org.example.tools.McpToolsAdapter
 import org.example.tools.core.ToolRegistry
+import org.example.tools.devassistant.docs.DocsIndex
+import org.example.tools.devassistant.docs.globalDocsIndex
 import org.koin.ktor.ext.inject
 import org.koin.ktor.ext.getKoin
 import org.koin.ktor.plugin.Koin
@@ -44,6 +46,7 @@ fun main() {
         configureKoin(apiKey)
         configureMcpTools()
         startReminderScheduler()
+        initializeDocsIndex()  // Автоиндексация документации
         configurePlugins()
         configureRouting()
     }.start(wait = true)
@@ -112,6 +115,47 @@ fun Application.startReminderScheduler() {
         logger.info("✅ Планировщик напоминаний запущен")
     } catch (e: Exception) {
         logger.error("❌ Ошибка при запуске планировщика напоминаний", e)
+    }
+}
+
+/**
+ * Автоиндексация документации проекта при старте.
+ * Пытается загрузить существующий индекс, если файлы не изменились.
+ * Иначе создаёт новый индекс.
+ */
+fun Application.initializeDocsIndex() {
+    val logger = LoggerFactory.getLogger("Application")
+    val projectPath = System.getenv("PROJECT_PATH") ?: "."
+
+    try {
+        logger.info("📚 Инициализация индекса документации...")
+
+        val docsIndex = DocsIndex(projectPath)
+
+        // Пробуем загрузить существующий индекс
+        val loaded = docsIndex.load()
+
+        if (loaded && !docsIndex.needsReindex()) {
+            logger.info("✅ Индекс документации загружен из кэша (${docsIndex.size()} чанков)")
+        } else {
+            // Индексируем заново
+            logger.info("🔄 Индексация документации...")
+            val result = docsIndex.indexProjectDocs()
+
+            if (result.success) {
+                // Сохраняем индекс для следующего запуска
+                docsIndex.save()
+                logger.info("✅ Документация проиндексирована: ${result.filesIndexed} файлов, ${result.chunksCreated} чанков")
+            } else {
+                logger.warn("⚠️ Не удалось проиндексировать документацию: ${result.error}")
+            }
+        }
+
+        // Устанавливаем глобальный индекс для использования инструментами
+        org.example.tools.devassistant.docs.globalDocsIndex = docsIndex
+
+    } catch (e: Exception) {
+        logger.error("❌ Ошибка при инициализации индекса документации", e)
     }
 }
 
