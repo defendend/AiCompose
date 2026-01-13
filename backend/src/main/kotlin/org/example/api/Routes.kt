@@ -732,9 +732,10 @@ fun Route.chatRoutes(
                 }
 
                 // Используем агента для анализа
+                val conversationId = UUID.randomUUID().toString()
                 val response = agent.chat(
                     userMessage = reviewPrompt,
-                    conversationId = "review-${request.owner}-${request.repo}-${request.prNumber}-${System.currentTimeMillis()}",
+                    conversationId = conversationId,
                     temperature = 0.3f  // Низкая температура для точности
                 )
 
