@@ -687,6 +687,84 @@ fun Route.chatRoutes(
                 call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Ошибка")))
             }
         }
+
+        /**
+         * Автоматическое ревью Pull Request.
+         * POST /api/review
+         */
+        post("/review") {
+            val startTime = System.currentTimeMillis()
+
+            try {
+                val request = call.receive<CodeReviewRequest>()
+
+                ServerLogger.log(
+                    level = LogLevel.INFO,
+                    message = "Code Review запрос: ${request.owner}/${request.repo}#${request.prNumber}",
+                    category = LogCategory.REQUEST
+                )
+
+                // Формируем промпт для ревью
+                val reviewPrompt = buildString {
+                    appendLine("Проведи code review для Pull Request #${request.prNumber} в репозитории ${request.owner}/${request.repo}.")
+                    appendLine()
+                    appendLine("Используй инструменты для анализа:")
+                    appendLine("1. github_get_pr_info - получи информацию о PR")
+                    appendLine("2. github_get_pr_diff - получи diff изменений")
+                    appendLine("3. github_get_pr_files - получи список файлов")
+                    appendLine("4. docs_search - найди релевантную документацию")
+                    appendLine()
+                    appendLine("Параметры для GitHub инструментов:")
+                    appendLine("- owner: ${request.owner}")
+                    appendLine("- repo: ${request.repo}")
+                    appendLine("- pr_number: ${request.prNumber}")
+                    appendLine("- token: ${request.githubToken}")
+                    appendLine()
+                    appendLine("После анализа:")
+                    appendLine("1. Сформируй структурированное ревью")
+                    appendLine("2. Укажи найденные проблемы с указанием файла и строки")
+                    appendLine("3. Дай рекомендации по улучшению")
+                    appendLine("4. Определи итоговый статус: APPROVE, REQUEST_CHANGES или COMMENT")
+                    if (request.postReview) {
+                        appendLine()
+                        appendLine("5. Опубликуй ревью с помощью github_post_review")
+                    }
+                }
+
+                // Используем агента для анализа
+                val response = agent.chat(
+                    userMessage = reviewPrompt,
+                    conversationId = "review-${request.owner}-${request.repo}-${request.prNumber}-${System.currentTimeMillis()}",
+                    temperature = 0.3f  // Низкая температура для точности
+                )
+
+                val duration = System.currentTimeMillis() - startTime
+
+                ServerLogger.log(
+                    level = LogLevel.INFO,
+                    message = "Code Review завершён за ${duration}ms",
+                    category = LogCategory.RESPONSE
+                )
+
+                val reviewResponse = CodeReviewResponse(
+                    status = "completed",
+                    owner = request.owner,
+                    repo = request.repo,
+                    prNumber = request.prNumber,
+                    review = response.message.content,
+                    durationMs = duration
+                )
+
+                call.respond(HttpStatusCode.OK, reviewResponse)
+
+            } catch (e: Exception) {
+                ServerLogger.logError("Ошибка code review", e)
+                call.respond(
+                    HttpStatusCode.InternalServerError,
+                    mapOf("error" to (e.message ?: "Ошибка code review"))
+                )
+            }
+        }
     }
 }
 
@@ -702,4 +780,40 @@ data class TokenEstimate(
     val length: Int,
     val estimatedTokens: Int,
     val note: String
+)
+
+/**
+ * Запрос на автоматическое ревью Pull Request.
+ */
+@Serializable
+data class CodeReviewRequest(
+    /** Владелец репозитория (organization или username) */
+    val owner: String,
+    /** Название репозитория */
+    val repo: String,
+    /** Номер Pull Request */
+    val prNumber: Int,
+    /** GitHub Personal Access Token с правами на repo */
+    val githubToken: String,
+    /** Опубликовать ревью в PR (по умолчанию false - только анализ) */
+    val postReview: Boolean = false
+)
+
+/**
+ * Ответ с результатами code review.
+ */
+@Serializable
+data class CodeReviewResponse(
+    /** Статус выполнения: completed, error */
+    val status: String,
+    /** Владелец репозитория */
+    val owner: String,
+    /** Название репозитория */
+    val repo: String,
+    /** Номер Pull Request */
+    val prNumber: Int,
+    /** Текст ревью с анализом и рекомендациями */
+    val review: String,
+    /** Время выполнения в миллисекундах */
+    val durationMs: Long
 )

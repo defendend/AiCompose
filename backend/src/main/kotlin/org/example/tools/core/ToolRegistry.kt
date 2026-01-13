@@ -120,6 +120,12 @@ object ToolRegistry {
         registerInternal(IdeGetContextTool, source = "built-in")
         registerInternal(IdeReadCurrentTool, source = "built-in")
         registerInternal(IdeClearContextTool, source = "built-in")
+
+        // DevAssistant - GitHub инструменты
+        registerInternal(org.example.tools.devassistant.github.GithubPrInfoTool, source = "built-in")
+        registerInternal(org.example.tools.devassistant.github.GithubPrDiffTool, source = "built-in")
+        registerInternal(org.example.tools.devassistant.github.GithubPrFilesTool, source = "built-in")
+        registerInternal(org.example.tools.devassistant.github.GithubPostReviewTool, source = "built-in")
     }
 
     /**

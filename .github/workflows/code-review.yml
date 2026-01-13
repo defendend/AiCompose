@@ -1,0 +1,154 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: true
+        type: number
+
+# Не запускаем параллельно для одного PR
+concurrency:
+  group: code-review-${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  code-review:
+    runs-on: ubuntu-latest
+    # Не запускаем для dependabot и renovate
+    if: github.actor != 'dependabot[bot]' && github.actor != 'renovate[bot]'
+
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get PR number
+        id: pr
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "number=${{ github.event.inputs.pr_number }}" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run AI Code Review
+        id: review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          API_URL: ${{ secrets.REVIEW_API_URL || 'http://89.169.190.22/api/review' }}
+        run: |
+          PR_NUMBER="${{ steps.pr.outputs.number }}"
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+
+          echo "Запуск ревью для $OWNER/$REPO#$PR_NUMBER"
+
+          # Вызываем API для code review
+          RESPONSE=$(curl -s -X POST "$API_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"owner\": \"$OWNER\",
+              \"repo\": \"$REPO\",
+              \"prNumber\": $PR_NUMBER,
+              \"githubToken\": \"$GITHUB_TOKEN\",
+              \"postReview\": false
+            }" \
+            --max-time 300)
+
+          # Проверяем успешность
+          STATUS=$(echo "$RESPONSE" | jq -r '.status // "error"')
+
+          if [ "$STATUS" == "completed" ]; then
+            echo "Ревью успешно завершено"
+
+            # Сохраняем результат в файл (избегаем проблем с экранированием)
+            echo "$RESPONSE" | jq -r '.review' > review_result.md
+
+            echo "review_success=true" >> $GITHUB_OUTPUT
+          else
+            echo "Ошибка ревью: $RESPONSE"
+            echo "review_success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Post review comment
+        if: steps.review.outputs.review_success == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const reviewContent = fs.readFileSync('review_result.md', 'utf8');
+
+            const prNumber = ${{ steps.pr.outputs.number }};
+
+            // Ищем существующий комментарий от бота
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber
+            });
+
+            const botComment = comments.data.find(c =>
+              c.user.type === 'Bot' &&
+              c.body.includes('<!-- AI Code Review -->')
+            );
+
+            const body = `<!-- AI Code Review -->
+            ## 🤖 AI Code Review
+
+            ${reviewContent}
+
+            ---
+            *Автоматически сгенерировано [AiCompose](https://github.com/${{ github.repository }})*
+            `;
+
+            if (botComment) {
+              // Обновляем существующий комментарий
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+              console.log('Обновлён существующий комментарий');
+            } else {
+              // Создаём новый комментарий
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: body
+              });
+              console.log('Создан новый комментарий');
+            }
+
+      - name: Review failed
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = ${{ steps.pr.outputs.number }};
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `<!-- AI Code Review Error -->
+            ## ⚠️ AI Code Review
+
+            К сожалению, автоматическое ревью не удалось выполнить.
+            Возможные причины:
+            - Сервер ревью недоступен
+            - Превышен таймаут обработки
+            - Ошибка API
+
+            Вы можете запустить ревью вручную через workflow_dispatch.
+            `
+            });
