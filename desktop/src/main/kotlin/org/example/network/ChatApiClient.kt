@@ -328,7 +328,55 @@ class ChatApiClient(
         }
     }
 
+    /**
+     * Отправить вопрос в поддержку.
+     */
+    suspend fun sendSupportQuestion(
+        question: String,
+        ticketId: String? = null,
+        userId: String? = null
+    ): SupportResponse {
+        AppLogger.info("ChatApiClient", "Support запрос: ${question.take(50)}...")
+
+        val request = SupportRequest(
+            question = question,
+            ticketId = ticketId,
+            userId = userId
+        )
+
+        val response = client.post("$baseUrl/api/support") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+
+        if (!response.status.isSuccess()) {
+            throw Exception("Ошибка API: ${response.status}")
+        }
+
+        return response.body()
+    }
+
     fun close() {
         client.close()
     }
 }
+
+/**
+ * Запрос в поддержку.
+ */
+@kotlinx.serialization.Serializable
+data class SupportRequest(
+    val question: String,
+    val ticketId: String? = null,
+    val userId: String? = null
+)
+
+/**
+ * Ответ от поддержки.
+ */
+@kotlinx.serialization.Serializable
+data class SupportResponse(
+    val answer: String,
+    val ticketId: String? = null,
+    val durationMs: Long
+)

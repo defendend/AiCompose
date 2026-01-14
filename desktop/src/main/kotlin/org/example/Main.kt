@@ -27,8 +27,10 @@ import org.example.ui.components.McpServersScreen
 import org.example.ui.components.ModelComparisonScreen
 import org.example.ui.components.ServerLogWindow
 import org.example.ui.components.SettingsScreen
+import org.example.ui.components.SupportScreen
 import org.example.ui.McpViewModel
 import org.example.ui.ModelComparisonViewModel
+import org.example.ui.SupportViewModel
 import org.example.ui.theme.AppTheme
 import org.koin.compose.KoinApplication
 import org.koin.compose.koinInject
@@ -37,7 +39,8 @@ enum class Screen {
     CHAT,
     SETTINGS,
     MODEL_COMPARISON,
-    MCP_SERVERS
+    MCP_SERVERS,
+    SUPPORT
 }
 
 fun main() = application {
@@ -59,6 +62,7 @@ private fun ApplicationScope.App() {
     val apiClient: ChatApiClient = koinInject()
     val modelComparisonViewModel = remember { ModelComparisonViewModel() }
     val mcpViewModel = remember { McpViewModel() }
+    val supportViewModel = remember { SupportViewModel(apiClient) }
 
     // Загружаем список чатов при запуске
     LaunchedEffect(Unit) {
@@ -97,7 +101,8 @@ private fun ApplicationScope.App() {
                     onToggleServerLogs = { showServerLogWindow = !showServerLogWindow },
                     onOpenSettings = { currentScreen = Screen.SETTINGS },
                     onOpenModelComparison = { currentScreen = Screen.MODEL_COMPARISON },
-                    onOpenMcpServers = { currentScreen = Screen.MCP_SERVERS }
+                    onOpenMcpServers = { currentScreen = Screen.MCP_SERVERS },
+                    onOpenSupport = { currentScreen = Screen.SUPPORT }
                 )
                 Screen.SETTINGS -> {
                     val collectionSettings by chatViewModel.collectionSettings.collectAsState()
@@ -131,6 +136,12 @@ private fun ApplicationScope.App() {
                         onBack = { currentScreen = Screen.CHAT }
                     )
                 }
+                Screen.SUPPORT -> {
+                    SupportScreen(
+                        viewModel = supportViewModel,
+                        onBack = { currentScreen = Screen.CHAT }
+                    )
+                }
             }
         }
     }
@@ -157,7 +168,8 @@ private fun MainContent(
     onToggleServerLogs: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenModelComparison: () -> Unit,
-    onOpenMcpServers: () -> Unit
+    onOpenMcpServers: () -> Unit,
+    onOpenSupport: () -> Unit
 ) {
     val collectionSettings by chatViewModel.collectionSettings.collectAsState()
     val conversations by conversationListViewModel.conversations.collectAsState()
@@ -325,6 +337,16 @@ private fun MainContent(
                                 },
                                 leadingIcon = {
                                     Text("🔌")
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Поддержка") },
+                                onClick = {
+                                    showMenu = false
+                                    onOpenSupport()
+                                },
+                                leadingIcon = {
+                                    Text("🎧")
                                 }
                             )
                             HorizontalDivider()
