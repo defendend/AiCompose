@@ -126,6 +126,15 @@ object ToolRegistry {
         registerInternal(org.example.tools.devassistant.github.GithubPrDiffTool, source = "built-in")
         registerInternal(org.example.tools.devassistant.github.GithubPrFilesTool, source = "built-in")
         registerInternal(org.example.tools.devassistant.github.GithubPostReviewTool, source = "built-in")
+
+        // Support инструменты (ассистент поддержки)
+        registerInternal(org.example.tools.support.SupportGetTicketTool, source = "built-in")
+        registerInternal(org.example.tools.support.SupportSearchTicketsTool, source = "built-in")
+        registerInternal(org.example.tools.support.SupportGetUserTool, source = "built-in")
+        registerInternal(org.example.tools.support.SupportCreateTicketTool, source = "built-in")
+        registerInternal(org.example.tools.support.SupportUpdateTicketTool, source = "built-in")
+        registerInternal(org.example.tools.support.SupportGetFaqTool, source = "built-in")
+        registerInternal(org.example.tools.support.SupportGetStatsTool, source = "built-in")
     }
 
     /**

@@ -766,6 +766,110 @@ fun Route.chatRoutes(
                 )
             }
         }
+
+        /**
+         * Ассистент поддержки пользователей.
+         * POST /api/support
+         */
+        post("/support") {
+            val startTime = System.currentTimeMillis()
+
+            try {
+                val request = call.receive<SupportAssistantRequest>()
+
+                ServerLogger.log(
+                    level = LogLevel.INFO,
+                    message = "Support запрос: ${request.question.take(50)}...",
+                    category = LogCategory.REQUEST
+                )
+
+                // Формируем контекст тикета если указан
+                val ticketContext = request.ticketId?.let { ticketId ->
+                    val repo = org.example.tools.support.SupportRepositoryHolder.repository
+                    val ticket = repo.getTicket(ticketId)
+                    val user = ticket?.let { repo.getUser(it.userId) }
+                    ticket?.let {
+                        """
+                        |КОНТЕКСТ ТИКЕТА:
+                        |ID: ${it.id}
+                        |Тема: ${it.subject}
+                        |Описание: ${it.description}
+                        |Статус: ${it.status}
+                        |Категория: ${it.category}
+                        |Приоритет: ${it.priority}
+                        |Пользователь: ${user?.name ?: it.userId} (${user?.email ?: "?"})
+                        |Тариф: ${user?.plan ?: "?"}
+                        |
+                        |История сообщений:
+                        |${it.messages.joinToString("\n") { msg -> "- ${msg.author}: ${msg.content}" }}
+                        """.trimMargin()
+                    }
+                }
+
+                // Формируем промпт для ассистента поддержки
+                val supportPrompt = buildString {
+                    appendLine("Ты — ассистент службы поддержки продукта AiCompose.")
+                    appendLine("Твоя задача — помочь пользователю, используя доступные инструменты и FAQ.")
+                    appendLine()
+                    appendLine("Доступные инструменты:")
+                    appendLine("- support_get_ticket — получить информацию о тикете")
+                    appendLine("- support_search_tickets — поиск тикетов")
+                    appendLine("- support_get_user — информация о пользователе")
+                    appendLine("- support_get_faq — поиск в FAQ")
+                    appendLine("- support_update_ticket — обновить тикет")
+                    appendLine("- support_get_stats — статистика поддержки")
+                    appendLine("- docs_search — поиск в документации")
+                    appendLine()
+
+                    ticketContext?.let {
+                        appendLine(it)
+                        appendLine()
+                    }
+
+                    request.userId?.let {
+                        appendLine("ID пользователя: $it")
+                        appendLine()
+                    }
+
+                    appendLine("ВОПРОС ПОЛЬЗОВАТЕЛЯ:")
+                    appendLine(request.question)
+                    appendLine()
+                    appendLine("Используй инструменты для поиска информации и дай подробный ответ.")
+                    appendLine("Если вопрос касается известной проблемы, найди релевантный FAQ.")
+                    appendLine("Ответ должен быть вежливым и полезным.")
+                }
+
+                val conversationId = UUID.randomUUID().toString()
+                val response = agent.chat(
+                    userMessage = supportPrompt,
+                    conversationId = conversationId,
+                    temperature = 0.5f
+                )
+
+                val duration = System.currentTimeMillis() - startTime
+
+                ServerLogger.log(
+                    level = LogLevel.INFO,
+                    message = "Support ответ за ${duration}ms",
+                    category = LogCategory.RESPONSE
+                )
+
+                val supportResponse = SupportAssistantResponse(
+                    answer = response.message.content,
+                    ticketId = request.ticketId,
+                    durationMs = duration
+                )
+
+                call.respond(HttpStatusCode.OK, supportResponse)
+
+            } catch (e: Exception) {
+                ServerLogger.logError("Ошибка support assistant", e)
+                call.respond(
+                    HttpStatusCode.InternalServerError,
+                    mapOf("error" to (e.message ?: "Ошибка support assistant"))
+                )
+            }
+        }
     }
 }
 
@@ -816,5 +920,31 @@ data class CodeReviewResponse(
     /** Текст ревью с анализом и рекомендациями */
     val review: String,
     /** Время выполнения в миллисекундах */
+    val durationMs: Long
+)
+
+/**
+ * Запрос к ассистенту поддержки.
+ */
+@Serializable
+data class SupportAssistantRequest(
+    /** Вопрос пользователя */
+    val question: String,
+    /** ID тикета для контекста (опционально) */
+    val ticketId: String? = null,
+    /** ID пользователя (опционально) */
+    val userId: String? = null
+)
+
+/**
+ * Ответ ассистента поддержки.
+ */
+@Serializable
+data class SupportAssistantResponse(
+    /** Ответ ассистента */
+    val answer: String,
+    /** ID тикета (если был указан) */
+    val ticketId: String? = null,
+    /** Время обработки в мс */
     val durationMs: Long
 )
