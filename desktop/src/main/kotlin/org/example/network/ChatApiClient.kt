@@ -356,10 +356,47 @@ class ChatApiClient(
         return response.body()
     }
 
+    /**
+     * Отправить вопрос командному ассистенту.
+     */
+    suspend fun sendTeamQuestion(question: String): TeamResponse {
+        AppLogger.info("ChatApiClient", "Team запрос: ${question.take(50)}...")
+
+        val request = TeamRequest(question = question)
+
+        val response = client.post("$baseUrl/api/team") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+
+        if (!response.status.isSuccess()) {
+            throw Exception("Ошибка API: ${response.status}")
+        }
+
+        return response.body()
+    }
+
     fun close() {
         client.close()
     }
 }
+
+/**
+ * Запрос командному ассистенту.
+ */
+@kotlinx.serialization.Serializable
+data class TeamRequest(
+    val question: String
+)
+
+/**
+ * Ответ от командного ассистента.
+ */
+@kotlinx.serialization.Serializable
+data class TeamResponse(
+    val answer: String,
+    val durationMs: Long
+)
 
 /**
  * Запрос в поддержку.

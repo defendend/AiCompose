@@ -870,6 +870,77 @@ fun Route.chatRoutes(
                 )
             }
         }
+
+        /**
+         * Командный ассистент (Team Assistant).
+         * POST /api/team
+         */
+        post("/team") {
+            val startTime = System.currentTimeMillis()
+
+            try {
+                val request = call.receive<TeamAssistantRequest>()
+
+                ServerLogger.log(
+                    level = LogLevel.INFO,
+                    message = "Team Assistant запрос: ${request.question.take(50)}...",
+                    category = LogCategory.REQUEST
+                )
+
+                // Формируем промпт для командного ассистента
+                val teamPrompt = buildString {
+                    appendLine("Ты — ассистент команды разработки проекта AiCompose.")
+                    appendLine("Твоя задача — помогать команде управлять задачами, отвечать на вопросы о проекте и давать рекомендации.")
+                    appendLine()
+                    appendLine("Доступные инструменты:")
+                    appendLine("- team_get_task — получить информацию о задаче по ID")
+                    appendLine("- team_search_tasks — поиск задач по фильтрам (статус, приоритет, исполнитель)")
+                    appendLine("- team_create_task — создать новую задачу")
+                    appendLine("- team_update_task_status — обновить статус задачи")
+                    appendLine("- team_get_member — информация о члене команды")
+                    appendLine("- team_get_stats — статистика команды и спринта")
+                    appendLine("- team_get_priorities — рекомендации по приоритетам задач")
+                    appendLine("- team_get_project — информация о проекте")
+                    appendLine("- docs_search — поиск в документации проекта")
+                    appendLine()
+                    appendLine("ВОПРОС:")
+                    appendLine(request.question)
+                    appendLine()
+                    appendLine("Используй инструменты для получения актуальной информации.")
+                    appendLine("Давай конкретные рекомендации на основе данных.")
+                    appendLine("Если нужны приоритеты — используй team_get_priorities.")
+                }
+
+                val conversationId = UUID.randomUUID().toString()
+                val response = agent.chat(
+                    userMessage = teamPrompt,
+                    conversationId = conversationId,
+                    temperature = 0.5f
+                )
+
+                val duration = System.currentTimeMillis() - startTime
+
+                ServerLogger.log(
+                    level = LogLevel.INFO,
+                    message = "Team Assistant ответ за ${duration}ms",
+                    category = LogCategory.RESPONSE
+                )
+
+                val teamResponse = TeamAssistantResponse(
+                    answer = response.message.content,
+                    durationMs = duration
+                )
+
+                call.respond(HttpStatusCode.OK, teamResponse)
+
+            } catch (e: Exception) {
+                ServerLogger.logError("Ошибка team assistant", e)
+                call.respond(
+                    HttpStatusCode.InternalServerError,
+                    mapOf("error" to (e.message ?: "Ошибка team assistant"))
+                )
+            }
+        }
     }
 }
 
@@ -945,6 +1016,26 @@ data class SupportAssistantResponse(
     val answer: String,
     /** ID тикета (если был указан) */
     val ticketId: String? = null,
+    /** Время обработки в мс */
+    val durationMs: Long
+)
+
+/**
+ * Запрос к командному ассистенту.
+ */
+@Serializable
+data class TeamAssistantRequest(
+    /** Вопрос или команда */
+    val question: String
+)
+
+/**
+ * Ответ командного ассистента.
+ */
+@Serializable
+data class TeamAssistantResponse(
+    /** Ответ ассистента */
+    val answer: String,
     /** Время обработки в мс */
     val durationMs: Long
 )

@@ -28,9 +28,11 @@ import org.example.ui.components.ModelComparisonScreen
 import org.example.ui.components.ServerLogWindow
 import org.example.ui.components.SettingsScreen
 import org.example.ui.components.SupportScreen
+import org.example.ui.components.TeamScreen
 import org.example.ui.McpViewModel
 import org.example.ui.ModelComparisonViewModel
 import org.example.ui.SupportViewModel
+import org.example.ui.TeamViewModel
 import org.example.ui.theme.AppTheme
 import org.koin.compose.KoinApplication
 import org.koin.compose.koinInject
@@ -40,7 +42,8 @@ enum class Screen {
     SETTINGS,
     MODEL_COMPARISON,
     MCP_SERVERS,
-    SUPPORT
+    SUPPORT,
+    TEAM
 }
 
 fun main() = application {
@@ -63,6 +66,7 @@ private fun ApplicationScope.App() {
     val modelComparisonViewModel = remember { ModelComparisonViewModel() }
     val mcpViewModel = remember { McpViewModel() }
     val supportViewModel = remember { SupportViewModel(apiClient) }
+    val teamViewModel = remember { TeamViewModel(apiClient) }
 
     // Загружаем список чатов при запуске
     LaunchedEffect(Unit) {
@@ -102,7 +106,8 @@ private fun ApplicationScope.App() {
                     onOpenSettings = { currentScreen = Screen.SETTINGS },
                     onOpenModelComparison = { currentScreen = Screen.MODEL_COMPARISON },
                     onOpenMcpServers = { currentScreen = Screen.MCP_SERVERS },
-                    onOpenSupport = { currentScreen = Screen.SUPPORT }
+                    onOpenSupport = { currentScreen = Screen.SUPPORT },
+                    onOpenTeam = { currentScreen = Screen.TEAM }
                 )
                 Screen.SETTINGS -> {
                     val collectionSettings by chatViewModel.collectionSettings.collectAsState()
@@ -142,6 +147,12 @@ private fun ApplicationScope.App() {
                         onBack = { currentScreen = Screen.CHAT }
                     )
                 }
+                Screen.TEAM -> {
+                    TeamScreen(
+                        viewModel = teamViewModel,
+                        onBack = { currentScreen = Screen.CHAT }
+                    )
+                }
             }
         }
     }
@@ -169,7 +180,8 @@ private fun MainContent(
     onOpenSettings: () -> Unit,
     onOpenModelComparison: () -> Unit,
     onOpenMcpServers: () -> Unit,
-    onOpenSupport: () -> Unit
+    onOpenSupport: () -> Unit,
+    onOpenTeam: () -> Unit
 ) {
     val collectionSettings by chatViewModel.collectionSettings.collectAsState()
     val conversations by conversationListViewModel.conversations.collectAsState()
@@ -347,6 +359,16 @@ private fun MainContent(
                                 },
                                 leadingIcon = {
                                     Text("🎧")
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Команда") },
+                                onClick = {
+                                    showMenu = false
+                                    onOpenTeam()
+                                },
+                                leadingIcon = {
+                                    Text("👥")
                                 }
                             )
                             HorizontalDivider()

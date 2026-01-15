@@ -135,6 +135,16 @@ object ToolRegistry {
         registerInternal(org.example.tools.support.SupportUpdateTicketTool, source = "built-in")
         registerInternal(org.example.tools.support.SupportGetFaqTool, source = "built-in")
         registerInternal(org.example.tools.support.SupportGetStatsTool, source = "built-in")
+
+        // Team инструменты (командный ассистент)
+        registerInternal(org.example.tools.team.TeamGetTaskTool, source = "built-in")
+        registerInternal(org.example.tools.team.TeamSearchTasksTool, source = "built-in")
+        registerInternal(org.example.tools.team.TeamCreateTaskTool, source = "built-in")
+        registerInternal(org.example.tools.team.TeamUpdateTaskStatusTool, source = "built-in")
+        registerInternal(org.example.tools.team.TeamGetMemberTool, source = "built-in")
+        registerInternal(org.example.tools.team.TeamGetStatsTool, source = "built-in")
+        registerInternal(org.example.tools.team.TeamGetPrioritiesTool, source = "built-in")
+        registerInternal(org.example.tools.team.TeamGetProjectTool, source = "built-in")
     }
 
     /**
