@@ -1,33 +1,13 @@
-# Example: Publish to RuStore
-# Copy to .github/workflows/ and configure secrets
-#
-# Required GitHub Secrets:
-#   KEYSTORE_BASE64      - base64 encoded keystore: `base64 -i release.keystore`
-#   KEYSTORE_PASSWORD    - keystore password
-#   KEY_ALIAS            - key alias in keystore
-#   KEY_PASSWORD         - key password
-#   RUSTORE_COMPANY_ID   - RuStore company ID
-#   RUSTORE_CLIENT_SECRET - RuStore API key
-
-name: Publish to RuStore
+name: RuStore - Build & Upload Draft
 
 on:
   push:
     tags:
-      - 'v*'  # Trigger on tags like v1.0.0
+      - 'v*'  # Триггер на теги вида v1.0.0
   workflow_dispatch:
-    inputs:
-      publish_type:
-        description: 'Publication type'
-        required: true
-        default: 'MANUAL'
-        type: choice
-        options:
-          - MANUAL      # Manual moderation
-          - INSTANTLY   # Instant publication (after approval)
 
 env:
-  PACKAGE_NAME: com.example.app  # Change to your package name
+  PACKAGE_NAME: com.idledungeonheroes.game
 
 jobs:
   # ========================================
@@ -61,7 +41,7 @@ jobs:
       - name: Grant execute permission
         run: |
           chmod +x ./gradlew
-          chmod +x ./korge-game/gradlew  # If using KorGE
+          chmod +x ./korge-game/gradlew
 
       - name: Get version info
         id: version
@@ -119,14 +99,14 @@ jobs:
             --ks-key-alias "$KEY_ALIAS" \
             --ks-pass pass:"$KEYSTORE_PASSWORD" \
             --key-pass pass:"$KEY_PASSWORD" \
-            --out build/outputs/apk/release/App-${{ steps.version.outputs.version_name }}.apk \
-            build/outputs/apk/release/*-release.apk
+            --out build/outputs/apk/release/IdleDungeonHeroes-${{ steps.version.outputs.version_name }}.apk \
+            build/outputs/apk/release/IdleDungeonHeroes-release.apk
 
           # Verify signature
-          $APKSIGNER verify --print-certs build/outputs/apk/release/App-${{ steps.version.outputs.version_name }}.apk
+          $APKSIGNER verify --print-certs build/outputs/apk/release/IdleDungeonHeroes-${{ steps.version.outputs.version_name }}.apk
 
           # Remove unsigned APK
-          rm -f build/outputs/apk/release/*-release.apk
+          rm -f build/outputs/apk/release/IdleDungeonHeroes-release.apk
 
       - name: Cleanup Keystore
         if: always()
@@ -141,12 +121,14 @@ jobs:
           if-no-files-found: error
 
   # ========================================
-  # Job 2: Publish to RuStore
+  # Job 2: Upload Draft to RuStore (automatic)
   # ========================================
-  publish-to-rustore:
-    name: Publish to RuStore
+  upload-draft-to-rustore:
+    name: Upload Draft to RuStore
     needs: build-release
     runs-on: ubuntu-latest
+    outputs:
+      version_id: ${{ steps.draft.outputs.version_id }}
 
     steps:
       - name: Checkout repository
@@ -161,54 +143,182 @@ jobs:
       - name: List artifacts
         run: ls -la ./artifacts/
 
-      - name: Get Release Notes
-        id: release_notes
-        run: |
-          if [ -f "whatsnew/whatsnew-ru-RU" ]; then
-            NOTES=$(cat whatsnew/whatsnew-ru-RU)
-          else
-            NOTES="Bug fixes and performance improvements."
-          fi
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Publish to RuStore
-        uses: AnyDevCode/rustore-publish-action@v1.0.0
+      - name: Setup Python for signing
+        uses: actions/setup-python@v5
         with:
-          # Credentials
-          company_id: ${{ secrets.RUSTORE_COMPANY_ID }}
-          client_secret: ${{ secrets.RUSTORE_CLIENT_SECRET }}
+          python-version: '3.11'
 
-          # App info
-          package_name: ${{ env.PACKAGE_NAME }}
-          apk_path: ./artifacts/*.apk
+      - name: Install dependencies
+        run: pip install cryptography requests
 
-          # Release info
-          version_code: ${{ needs.build-release.outputs.version_code }}
-          version_name: ${{ needs.build-release.outputs.version_name }}
-          release_notes: ${{ steps.release_notes.outputs.notes }}
-
-          # Publish type: MANUAL or INSTANTLY
-          publish_type: ${{ github.event.inputs.publish_type || 'MANUAL' }}
-
-      - name: Success notification
+      - name: Get RuStore Auth Token
+        id: auth
+        env:
+          RUSTORE_KEY_ID: ${{ secrets.RUSTORE_COMPANY_ID }}
+          RUSTORE_PRIVATE_KEY: ${{ secrets.RUSTORE_CLIENT_SECRET }}
         run: |
-          echo "========================================="
-          echo "Successfully published to RuStore!"
-          echo "========================================="
-          echo "Package: ${{ env.PACKAGE_NAME }}"
-          echo "Version: ${{ needs.build-release.outputs.version_name }}"
-          echo "Version Code: ${{ needs.build-release.outputs.version_code }}"
-          echo "Publish Type: ${{ github.event.inputs.publish_type || 'MANUAL' }}"
-          echo "========================================="
+          python3 << 'PYTHON_SCRIPT'
+          import requests
+          import os
+          import base64
+          from datetime import datetime, timezone
+          from cryptography.hazmat.primitives import hashes, serialization
+          from cryptography.hazmat.primitives.asymmetric import padding
+          from cryptography.hazmat.backends import default_backend
+
+          key_id = os.environ['RUSTORE_KEY_ID']
+          private_key_pem = os.environ['RUSTORE_PRIVATE_KEY']
+
+          # Convert to PEM format if needed
+          if not private_key_pem.startswith('-----BEGIN'):
+              private_key_pem = f"-----BEGIN PRIVATE KEY-----\n{private_key_pem}\n-----END PRIVATE KEY-----"
+
+          # Load private key
+          try:
+              private_key = serialization.load_pem_private_key(
+                  private_key_pem.encode(),
+                  password=None,
+                  backend=default_backend()
+              )
+          except Exception as e:
+              print(f"Failed to load private key: {e}")
+              exit(1)
+
+          # Create ISO 8601 timestamp with milliseconds and timezone
+          # Format: 2024-06-18T11:49:08.290+03:00
+          now = datetime.now(timezone.utc)
+          # Use 3 digits for milliseconds (not 6 for microseconds)
+          timestamp = now.strftime('%Y-%m-%dT%H:%M:%S.') + f'{now.microsecond // 1000:03d}' + '+00:00'
+
+          # Sign keyId + timestamp (concatenated) with SHA512withRSA
+          data_to_sign = key_id + timestamp
+          try:
+              signature_bytes = private_key.sign(
+                  data_to_sign.encode('utf-8'),
+                  padding.PKCS1v15(),
+                  hashes.SHA512()
+              )
+              signature = base64.b64encode(signature_bytes).decode('utf-8')
+          except Exception as e:
+              print(f"Signing error: {e}")
+              exit(1)
+
+          # Auth request - use keyId, not companyId!
+          auth_data = {
+              'keyId': key_id,
+              'timestamp': timestamp,
+              'signature': signature
+          }
+
+          print(f"Auth request: keyId={key_id}, timestamp={timestamp}")
+          print(f"Data to sign: {data_to_sign}")
+          print(f"Signature length: {len(signature)}")
+
+          response = requests.post(
+              'https://public-api.rustore.ru/public/auth',
+              json=auth_data
+          )
+
+          print(f"Auth response: {response.text}")
+
+          if response.status_code == 200:
+              data = response.json()
+              if data.get('code') == 'OK' and data.get('body', {}).get('jwe'):
+                  token = data['body']['jwe']
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                      f.write(f"token={token}\n")
+                  print("Auth successful!")
+              else:
+                  print(f"Auth failed: {data}")
+                  exit(1)
+          else:
+              print(f"Auth request failed: {response.status_code}")
+              exit(1)
+          PYTHON_SCRIPT
+
+      - name: Create Draft Version
+        id: draft
+        env:
+          AUTH_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          echo "Step 1: Creating draft version..."
+
+          # Create draft version (JSON, no file)
+          RESPONSE=$(curl -s -X POST "https://public-api.rustore.ru/public/v1/application/${{ env.PACKAGE_NAME }}/version" \
+            -H "Public-Token: $AUTH_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"appType": "MAIN", "publishType": "MANUAL"}')
+
+          echo "Create draft response: $RESPONSE"
+          VERSION_ID=$(echo $RESPONSE | jq -r '.body.versionId // empty')
+
+          if [ -z "$VERSION_ID" ] || [ "$VERSION_ID" = "null" ]; then
+            echo "Failed to create draft version"
+            echo "Response: $RESPONSE"
+            echo "version_id=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "✅ Created draft version: $VERSION_ID"
+          echo "version_id=$VERSION_ID" >> $GITHUB_OUTPUT
+
+      - name: Upload APK to Draft
+        id: upload
+        if: steps.draft.outputs.version_id != ''
+        env:
+          AUTH_TOKEN: ${{ steps.auth.outputs.token }}
+          VERSION_ID: ${{ steps.draft.outputs.version_id }}
+        run: |
+          APK_FILE=$(ls ./artifacts/*.apk | head -1)
+          APK_SIZE=$(stat -f%z "$APK_FILE" 2>/dev/null || stat -c%s "$APK_FILE")
+          echo "Step 2: Uploading APK..."
+          echo "File: $APK_FILE"
+          echo "Size: $((APK_SIZE / 1024 / 1024)) MB"
+
+          # Upload APK to the draft version
+          RESPONSE=$(curl -s -X POST "https://public-api.rustore.ru/public/v1/application/${{ env.PACKAGE_NAME }}/version/$VERSION_ID/apk?servicesType=Unknown&isMainApk=true" \
+            -H "Public-Token: $AUTH_TOKEN" \
+            -F "file=@$APK_FILE")
+
+          echo "Upload response: $RESPONSE"
+          CODE=$(echo $RESPONSE | jq -r '.code // empty')
+
+          if [ "$CODE" = "OK" ]; then
+            echo "✅ APK uploaded successfully!"
+            echo "upload_success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Failed to upload APK"
+            echo "Response: $RESPONSE"
+            echo "upload_success=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Draft Status
+        run: |
+          if [ -n "${{ steps.draft.outputs.version_id }}" ]; then
+            echo "========================================="
+            echo "✅ Draft uploaded to RuStore!"
+            echo "========================================="
+            echo "Package: ${{ env.PACKAGE_NAME }}"
+            echo "Version: ${{ needs.build-release.outputs.version_name }}"
+            echo "Version ID: ${{ steps.draft.outputs.version_id }}"
+            echo ""
+            echo "To submit for review, run workflow manually with action=submit_review"
+            echo "========================================="
+          else
+            echo "========================================="
+            echo "⚠️ Draft upload failed or skipped"
+            echo "========================================="
+            echo "Please upload APK manually to RuStore Console"
+            echo "APK is available in GitHub Actions artifacts"
+            echo "========================================="
+          fi
 
   # ========================================
   # Job 3: Create GitHub Release
   # ========================================
   create-github-release:
     name: Create GitHub Release
-    needs: [build-release, publish-to-rustore]
+    needs: [build-release, upload-draft-to-rustore]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
 
@@ -224,13 +334,13 @@ jobs:
         with:
           name: Release ${{ needs.build-release.outputs.version_name }}
           body: |
-            ## App v${{ needs.build-release.outputs.version_name }}
+            ## Idle Dungeon Heroes v${{ needs.build-release.outputs.version_name }}
 
             ### Downloads
             - **APK**: Direct install on Android devices
 
             ### RuStore
-            This version was automatically published to RuStore.
+            Черновик загружен в RuStore. Для отправки на модерацию запустите workflow вручную с action=submit_review
 
             Version Code: `${{ needs.build-release.outputs.version_code }}`
           files: ./artifacts/*.apk

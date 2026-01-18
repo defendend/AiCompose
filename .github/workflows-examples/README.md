@@ -7,7 +7,8 @@
 | Файл | Описание |
 |------|----------|
 | `build-debug-apk.yml` | Сборка Debug APK (без подписи) |
-| `publish-rustore.yml` | Публикация в RuStore |
+| `publish-rustore.yml` | Сборка + загрузка черновика в RuStore |
+| `rustore-submit-review.yml` | Отправка черновика на модерацию (ручной запуск) |
 | `publish-google-play.yml` | Публикация в Google Play Internal Testing |
 
 ## Использование
@@ -31,14 +32,39 @@
 
 | Secret | Описание | Как получить |
 |--------|----------|--------------|
-| `RUSTORE_COMPANY_ID` | ID компании | RuStore Console → Настройки |
-| `RUSTORE_CLIENT_SECRET` | API ключ | RuStore Console → API |
+| `RUSTORE_COMPANY_ID` | **key_id** из JSON | RuStore Console → Компания → API → Сгенерировать ключ → скачать JSON |
+| `RUSTORE_CLIENT_SECRET` | **client_secret** (приватный ключ) | Из того же JSON файла |
+
+**Важно:** `RUSTORE_COMPANY_ID` должен содержать именно `key_id` из скачанного JSON файла, а НЕ ID компании!
+
+Формат JSON файла из RuStore Console:
+```json
+{
+  "key_id": "12345678",              // ← это в RUSTORE_COMPANY_ID
+  "client_secret": "MIIEvQ..."       // ← это в RUSTORE_CLIENT_SECRET
+}
+```
 
 ### Для Google Play
 
 | Secret | Описание | Как получить |
 |--------|----------|--------------|
 | `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` | Service Account JSON | Google Play Console → API access |
+
+## RuStore Workflow
+
+Публикация в RuStore состоит из двух шагов:
+
+### 1. Автоматический: Build & Upload Draft (`publish-rustore.yml`)
+- Триггер: создание тега `v*` (например `v1.0.0`)
+- Собирает и подписывает APK
+- Загружает черновик в RuStore
+- Создаёт GitHub Release
+
+### 2. Ручной: Submit for Review (`rustore-submit-review.yml`)
+- Триггер: ручной запуск (workflow_dispatch)
+- Требует `version_id` из лога предыдущего workflow
+- Отправляет черновик на модерацию
 
 ## Создание Keystore
 
@@ -71,8 +97,17 @@ KorGE игнорирует стандартные параметры подпи�
 ## Триггеры
 
 - **build-debug-apk.yml** — при push в main (изменения в korge-game/ или shared/)
-- **publish-*.yml** — при создании тега `v*` (например: `git tag v1.0.0 && git push origin v1.0.0`)
+- **publish-rustore.yml** — при создании тега `v*`
+- **rustore-submit-review.yml** — только ручной запуск
+- **publish-google-play.yml** — при создании тега `v*`
 
 ## Ручной запуск
 
 Actions → выбери workflow → Run workflow
+
+## RuStore API Authentication
+
+Аутентификация использует SHA512withRSA подпись:
+- Формат timestamp: ISO 8601 (`2024-06-18T11:49:08.290+03:00`)
+- Подписывается: `keyId + timestamp`
+- Документация: https://www.rustore.ru/help/work-with-rustore-api/api-authorization-token

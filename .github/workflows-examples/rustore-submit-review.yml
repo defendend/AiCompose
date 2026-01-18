@@ -1,0 +1,146 @@
+name: RuStore - Submit for Review
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_id:
+        description: 'Version ID из RuStore (из лога upload-draft)'
+        required: true
+        type: string
+
+env:
+  PACKAGE_NAME: com.idledungeonheroes.game
+
+jobs:
+  submit-for-review:
+    name: Submit for Review
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install cryptography requests
+
+      - name: Get Release Notes
+        id: release_notes
+        run: |
+          if [ -f "whatsnew/whatsnew-ru-RU" ]; then
+            NOTES=$(cat whatsnew/whatsnew-ru-RU)
+          else
+            NOTES="Исправления ошибок и улучшение производительности."
+          fi
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Get RuStore Auth Token
+        id: auth
+        env:
+          RUSTORE_KEY_ID: ${{ secrets.RUSTORE_COMPANY_ID }}
+          RUSTORE_PRIVATE_KEY: ${{ secrets.RUSTORE_CLIENT_SECRET }}
+        run: |
+          python3 << 'PYTHON_SCRIPT'
+          import requests
+          import os
+          import base64
+          from datetime import datetime, timezone
+          from cryptography.hazmat.primitives import hashes, serialization
+          from cryptography.hazmat.primitives.asymmetric import padding
+          from cryptography.hazmat.backends import default_backend
+
+          key_id = os.environ['RUSTORE_KEY_ID']
+          private_key_pem = os.environ['RUSTORE_PRIVATE_KEY']
+
+          if not private_key_pem.startswith('-----BEGIN'):
+              private_key_pem = f"-----BEGIN PRIVATE KEY-----\n{private_key_pem}\n-----END PRIVATE KEY-----"
+
+          # Load private key
+          try:
+              private_key = serialization.load_pem_private_key(
+                  private_key_pem.encode(),
+                  password=None,
+                  backend=default_backend()
+              )
+          except Exception as e:
+              print(f"Failed to load private key: {e}")
+              exit(1)
+
+          # Create ISO 8601 timestamp with milliseconds and timezone
+          now = datetime.now(timezone.utc)
+          timestamp = now.strftime('%Y-%m-%dT%H:%M:%S.') + f'{now.microsecond // 1000:03d}' + '+00:00'
+
+          # Sign keyId + timestamp with SHA512withRSA
+          data_to_sign = key_id + timestamp
+          try:
+              signature_bytes = private_key.sign(
+                  data_to_sign.encode('utf-8'),
+                  padding.PKCS1v15(),
+                  hashes.SHA512()
+              )
+              signature = base64.b64encode(signature_bytes).decode('utf-8')
+          except Exception as e:
+              print(f"Signing error: {e}")
+              exit(1)
+
+          response = requests.post(
+              'https://public-api.rustore.ru/public/auth',
+              json={'keyId': key_id, 'timestamp': timestamp, 'signature': signature}
+          )
+
+          print(f"Auth response: {response.text}")
+
+          if response.status_code == 200:
+              data = response.json()
+              if data.get('code') == 'OK' and data.get('body', {}).get('jwe'):
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                      f.write(f"token={data['body']['jwe']}\n")
+                  print("Auth successful!")
+              else:
+                  print(f"Auth failed: {data}")
+                  exit(1)
+          else:
+              print(f"Auth failed: {response.status_code}")
+              exit(1)
+          PYTHON_SCRIPT
+
+      - name: Submit for Review
+        env:
+          AUTH_TOKEN: ${{ steps.auth.outputs.token }}
+          VERSION_ID: ${{ github.event.inputs.version_id }}
+          RELEASE_NOTES: ${{ steps.release_notes.outputs.notes }}
+        run: |
+          echo "Submitting version $VERSION_ID for review..."
+
+          RESPONSE=$(curl -s -X POST "https://public-api.rustore.ru/public/v1/application/${{ env.PACKAGE_NAME }}/version/$VERSION_ID/commit" \
+            -H "Public-Token: $AUTH_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"priorityUpdate\": 0,
+              \"publishType\": \"MANUAL\",
+              \"whatsNew\": \"$RELEASE_NOTES\"
+            }")
+
+          echo "Submit response: $RESPONSE"
+
+          CODE=$(echo $RESPONSE | jq -r '.code // empty')
+          if [ "$CODE" = "OK" ]; then
+            echo "========================================="
+            echo "✅ Successfully submitted for review!"
+            echo "========================================="
+            echo "Package: ${{ env.PACKAGE_NAME }}"
+            echo "Version ID: $VERSION_ID"
+            echo "========================================="
+          else
+            echo "========================================="
+            echo "❌ Failed to submit for review"
+            echo "Response: $RESPONSE"
+            echo "========================================="
+            exit 1
+          fi
