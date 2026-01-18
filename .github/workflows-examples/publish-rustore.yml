@@ -1,0 +1,240 @@
+# Example: Publish to RuStore
+# Copy to .github/workflows/ and configure secrets
+#
+# Required GitHub Secrets:
+#   KEYSTORE_BASE64      - base64 encoded keystore: `base64 -i release.keystore`
+#   KEYSTORE_PASSWORD    - keystore password
+#   KEY_ALIAS            - key alias in keystore
+#   KEY_PASSWORD         - key password
+#   RUSTORE_COMPANY_ID   - RuStore company ID
+#   RUSTORE_CLIENT_SECRET - RuStore API key
+
+name: Publish to RuStore
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on tags like v1.0.0
+  workflow_dispatch:
+    inputs:
+      publish_type:
+        description: 'Publication type'
+        required: true
+        default: 'MANUAL'
+        type: choice
+        options:
+          - MANUAL      # Manual moderation
+          - INSTANTLY   # Instant publication (after approval)
+
+env:
+  PACKAGE_NAME: com.example.app  # Change to your package name
+
+jobs:
+  # ========================================
+  # Job 1: Build Release APK
+  # ========================================
+  build-release:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+
+    outputs:
+      version_code: ${{ steps.version.outputs.version_code }}
+      version_name: ${{ steps.version.outputs.version_name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: false
+
+      - name: Grant execute permission
+        run: |
+          chmod +x ./gradlew
+          chmod +x ./korge-game/gradlew  # If using KorGE
+
+      - name: Get version info
+        id: version
+        run: |
+          VERSION_CODE=$(git rev-list --count HEAD)
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION_NAME="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION_NAME="$(git describe --tags --always)"
+          fi
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+
+          echo "Version Code: $VERSION_CODE"
+          echo "Version Name: $VERSION_NAME"
+
+      - name: Decode Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > korge-game/release.keystore
+
+      - name: Build shared module (JVM only)
+        run: ./gradlew :shared:jvmJar
+
+      - name: Build Release APK
+        working-directory: korge-game
+        env:
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+        run: |
+          # KorGE ignores signing parameters, so we build unsigned first
+          ./gradlew assembleRelease \
+            -x generateReleaseLintVitalReportModel \
+            -x lintVitalAnalyzeRelease \
+            -x lintVitalRelease \
+            -Pandroid.injected.version.code="$VERSION_CODE" \
+            -Pandroid.injected.version.name="$VERSION_NAME"
+
+      - name: Sign APK with release keystore
+        working-directory: korge-game
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          # Find APK signer
+          APKSIGNER=$(find $ANDROID_HOME/build-tools -name "apksigner" | sort -V | tail -1)
+          echo "Using apksigner: $APKSIGNER"
+
+          # Sign APK with our release keystore
+          $APKSIGNER sign \
+            --ks release.keystore \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass pass:"$KEYSTORE_PASSWORD" \
+            --key-pass pass:"$KEY_PASSWORD" \
+            --out build/outputs/apk/release/App-${{ steps.version.outputs.version_name }}.apk \
+            build/outputs/apk/release/*-release.apk
+
+          # Verify signature
+          $APKSIGNER verify --print-certs build/outputs/apk/release/App-${{ steps.version.outputs.version_name }}.apk
+
+          # Remove unsigned APK
+          rm -f build/outputs/apk/release/*-release.apk
+
+      - name: Cleanup Keystore
+        if: always()
+        run: rm -f korge-game/release.keystore
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk-${{ steps.version.outputs.version_name }}
+          path: korge-game/build/outputs/apk/release/*.apk
+          retention-days: 90
+          if-no-files-found: error
+
+  # ========================================
+  # Job 2: Publish to RuStore
+  # ========================================
+  publish-to-rustore:
+    name: Publish to RuStore
+    needs: build-release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: release-apk-${{ needs.build-release.outputs.version_name }}
+          path: ./artifacts
+
+      - name: List artifacts
+        run: ls -la ./artifacts/
+
+      - name: Get Release Notes
+        id: release_notes
+        run: |
+          if [ -f "whatsnew/whatsnew-ru-RU" ]; then
+            NOTES=$(cat whatsnew/whatsnew-ru-RU)
+          else
+            NOTES="Bug fixes and performance improvements."
+          fi
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Publish to RuStore
+        uses: AnyDevCode/rustore-publish-action@v1.0.0
+        with:
+          # Credentials
+          company_id: ${{ secrets.RUSTORE_COMPANY_ID }}
+          client_secret: ${{ secrets.RUSTORE_CLIENT_SECRET }}
+
+          # App info
+          package_name: ${{ env.PACKAGE_NAME }}
+          apk_path: ./artifacts/*.apk
+
+          # Release info
+          version_code: ${{ needs.build-release.outputs.version_code }}
+          version_name: ${{ needs.build-release.outputs.version_name }}
+          release_notes: ${{ steps.release_notes.outputs.notes }}
+
+          # Publish type: MANUAL or INSTANTLY
+          publish_type: ${{ github.event.inputs.publish_type || 'MANUAL' }}
+
+      - name: Success notification
+        run: |
+          echo "========================================="
+          echo "Successfully published to RuStore!"
+          echo "========================================="
+          echo "Package: ${{ env.PACKAGE_NAME }}"
+          echo "Version: ${{ needs.build-release.outputs.version_name }}"
+          echo "Version Code: ${{ needs.build-release.outputs.version_code }}"
+          echo "Publish Type: ${{ github.event.inputs.publish_type || 'MANUAL' }}"
+          echo "========================================="
+
+  # ========================================
+  # Job 3: Create GitHub Release
+  # ========================================
+  create-github-release:
+    name: Create GitHub Release
+    needs: [build-release, publish-to-rustore]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: release-apk-${{ needs.build-release.outputs.version_name }}
+          path: ./artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ needs.build-release.outputs.version_name }}
+          body: |
+            ## App v${{ needs.build-release.outputs.version_name }}
+
+            ### Downloads
+            - **APK**: Direct install on Android devices
+
+            ### RuStore
+            This version was automatically published to RuStore.
+
+            Version Code: `${{ needs.build-release.outputs.version_code }}`
+          files: ./artifacts/*.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

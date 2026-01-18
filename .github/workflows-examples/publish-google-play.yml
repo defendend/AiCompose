@@ -1,0 +1,266 @@
+# Example: Publish to Google Play Internal Testing
+# Copy to .github/workflows/ and configure secrets
+#
+# Required GitHub Secrets:
+#   KEYSTORE_BASE64                    - base64 encoded keystore
+#   KEYSTORE_PASSWORD                  - keystore password
+#   KEY_ALIAS                          - key alias
+#   KEY_PASSWORD                       - key password
+#   GOOGLE_PLAY_SERVICE_ACCOUNT_JSON   - Google Play service account JSON
+
+name: Publish to Internal Testing
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on tags like v1.0.0
+  workflow_dispatch:
+    inputs:
+      track:
+        description: 'Release track'
+        required: true
+        default: 'internal'
+        type: choice
+        options:
+          - internal
+          - alpha
+          - beta
+      rollout_percentage:
+        description: 'Rollout percentage (internal always 100%)'
+        required: false
+        default: '100'
+
+env:
+  PACKAGE_NAME: com.example.app  # Change to your package name
+
+jobs:
+  # ========================================
+  # Job 1: Build Release AAB
+  # ========================================
+  build-release:
+    name: Build Release AAB
+    runs-on: ubuntu-latest
+
+    outputs:
+      version_code: ${{ steps.version.outputs.version_code }}
+      version_name: ${{ steps.version.outputs.version_name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: false
+
+      - name: Grant execute permission
+        run: |
+          chmod +x ./gradlew
+          chmod +x ./korge-game/gradlew
+
+      - name: Get version info
+        id: version
+        run: |
+          VERSION_CODE=$(git rev-list --count HEAD)
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION_NAME="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION_NAME="$(git describe --tags --always)"
+          fi
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+
+          echo "Version Code: $VERSION_CODE"
+          echo "Version Name: $VERSION_NAME"
+
+      - name: Decode Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > korge-game/release.keystore
+          echo "Keystore decoded successfully"
+
+      - name: Build shared module (JVM only)
+        run: ./gradlew :shared:jvmJar
+
+      - name: Build Release AAB and APK
+        working-directory: korge-game
+        env:
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+        run: |
+          # KorGE ignores signing parameters, so we build unsigned first
+          ./gradlew bundleRelease assembleRelease \
+            -x generateReleaseLintVitalReportModel \
+            -x lintVitalAnalyzeRelease \
+            -x lintVitalRelease \
+            -Pandroid.injected.version.code="$VERSION_CODE" \
+            -Pandroid.injected.version.name="$VERSION_NAME"
+
+      - name: Sign AAB with jarsigner
+        working-directory: korge-game
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          VERSION="${{ steps.version.outputs.version_name }}"
+
+          # Sign AAB with jarsigner
+          jarsigner -verbose \
+            -sigalg SHA256withRSA \
+            -digestalg SHA-256 \
+            -keystore release.keystore \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -keypass "$KEY_PASSWORD" \
+            build/outputs/bundle/release/*-release.aab \
+            "$KEY_ALIAS"
+
+          # Rename signed AAB
+          mv build/outputs/bundle/release/*-release.aab \
+             build/outputs/bundle/release/App-${VERSION}.aab
+
+          # Verify AAB signature
+          jarsigner -verify build/outputs/bundle/release/App-${VERSION}.aab
+
+      - name: Sign APK with apksigner
+        working-directory: korge-game
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          VERSION="${{ steps.version.outputs.version_name }}"
+
+          # Find APK signer
+          APKSIGNER=$(find $ANDROID_HOME/build-tools -name "apksigner" | sort -V | tail -1)
+          echo "Using apksigner: $APKSIGNER"
+
+          # Sign APK with our release keystore
+          $APKSIGNER sign \
+            --ks release.keystore \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass pass:"$KEYSTORE_PASSWORD" \
+            --key-pass pass:"$KEY_PASSWORD" \
+            --out build/outputs/apk/release/App-${VERSION}.apk \
+            build/outputs/apk/release/*-release.apk
+
+          # Verify signature
+          $APKSIGNER verify --print-certs build/outputs/apk/release/App-${VERSION}.apk
+
+          # Remove unsigned APK
+          rm -f build/outputs/apk/release/*-release.apk
+
+      - name: Cleanup Keystore
+        if: always()
+        run: rm -f korge-game/release.keystore
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-aab-${{ steps.version.outputs.version_name }}
+          path: korge-game/build/outputs/bundle/release/*.aab
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk-${{ steps.version.outputs.version_name }}
+          path: korge-game/build/outputs/apk/release/*.apk
+          retention-days: 90
+          if-no-files-found: error
+
+  # ========================================
+  # Job 2: Publish to Google Play
+  # ========================================
+  publish-to-play-store:
+    name: Publish to Play Store
+    needs: build-release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download AAB
+        uses: actions/download-artifact@v4
+        with:
+          name: release-aab-${{ needs.build-release.outputs.version_name }}
+          path: ./artifacts
+
+      - name: List artifacts
+        run: ls -la ./artifacts/
+
+      - name: Upload to Google Play Internal Testing
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ env.PACKAGE_NAME }}
+          releaseFiles: ./artifacts/*.aab
+          track: ${{ github.event.inputs.track || 'internal' }}
+          status: completed
+          whatsNewDirectory: ./whatsnew
+
+      - name: Success notification
+        run: |
+          echo "========================================="
+          echo "Successfully published to Google Play!"
+          echo "========================================="
+          echo "Package: ${{ env.PACKAGE_NAME }}"
+          echo "Track: ${{ github.event.inputs.track || 'internal' }}"
+          echo "Version: ${{ needs.build-release.outputs.version_name }}"
+          echo "Version Code: ${{ needs.build-release.outputs.version_code }}"
+          echo "========================================="
+
+  # ========================================
+  # Job 3: Create GitHub Release
+  # ========================================
+  create-github-release:
+    name: Create GitHub Release
+    needs: [build-release, publish-to-play-store]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: release-apk-${{ needs.build-release.outputs.version_name }}
+          path: ./artifacts
+
+      - name: Download AAB
+        uses: actions/download-artifact@v4
+        with:
+          name: release-aab-${{ needs.build-release.outputs.version_name }}
+          path: ./artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ needs.build-release.outputs.version_name }}
+          body: |
+            ## App v${{ needs.build-release.outputs.version_name }}
+
+            ### Downloads
+            - **APK**: Direct install on Android devices
+            - **AAB**: Google Play bundle
+
+            ### Google Play
+            This version has been automatically published to **Internal Testing**.
+
+            Version Code: `${{ needs.build-release.outputs.version_code }}`
+          files: |
+            ./artifacts/*.apk
+            ./artifacts/*.aab
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
