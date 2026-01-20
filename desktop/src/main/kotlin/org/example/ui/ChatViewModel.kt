@@ -13,6 +13,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.example.logging.AppLogger
 import org.example.network.ChatApiClient
+import org.example.network.OllamaClient
+import org.example.network.OllamaMessage
+import org.example.network.OllamaModel
 import org.example.shared.model.ChatMessage
 import org.example.shared.model.CollectionSettings
 import org.example.shared.model.CompressionSettings
@@ -23,9 +26,35 @@ import org.example.shared.model.StreamEventType
 import java.util.UUID
 
 class ChatViewModel(
-    private val apiClient: ChatApiClient = ChatApiClient()
+    private val apiClient: ChatApiClient = ChatApiClient(),
+    private val ollamaClient: OllamaClient = OllamaClient()
 ) {
     private val scope = CoroutineScope(Dispatchers.IO)
+
+    // Offline mode state
+    private val _isOfflineMode = MutableStateFlow(false)
+    val isOfflineMode: StateFlow<Boolean> = _isOfflineMode.asStateFlow()
+
+    private val _ollamaAvailable = MutableStateFlow(false)
+    val ollamaAvailable: StateFlow<Boolean> = _ollamaAvailable.asStateFlow()
+
+    private val _currentOllamaModel = MutableStateFlow("qwen2.5:0.5b")
+    val currentOllamaModel: StateFlow<String> = _currentOllamaModel.asStateFlow()
+
+    // Список доступных моделей Ollama
+    private val _availableOllamaModels = MutableStateFlow<List<OllamaModel>>(emptyList())
+    val availableOllamaModels: StateFlow<List<OllamaModel>> = _availableOllamaModels.asStateFlow()
+
+    // Время последнего ответа (мс)
+    private val _lastResponseTime = MutableStateFlow<Long?>(null)
+    val lastResponseTime: StateFlow<Long?> = _lastResponseTime.asStateFlow()
+
+    // Скорость генерации (токенов/сек) — приблизительно по символам
+    private val _generationSpeed = MutableStateFlow<Float?>(null)
+    val generationSpeed: StateFlow<Float?> = _generationSpeed.asStateFlow()
+
+    // История для Ollama (локальная)
+    private val ollamaHistory = mutableListOf<OllamaMessage>()
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
@@ -90,11 +119,123 @@ class ChatViewModel(
     }
 
     fun sendMessage(text: String) {
-        AppLogger.info("ChatViewModel", "sendMessage called, useStreaming=${_useStreaming.value}")
+        AppLogger.info("ChatViewModel", "sendMessage called, useStreaming=${_useStreaming.value}, offlineMode=${_isOfflineMode.value}")
+
+        // Если включён offline режим — используем Ollama
+        if (_isOfflineMode.value) {
+            sendMessageOllama(text)
+            return
+        }
+
         if (_useStreaming.value) {
             sendMessageStreaming(text)
         } else {
             sendMessageClassic(text)
+        }
+    }
+
+    /**
+     * Отправка сообщения через локальную Ollama LLM с поддержкой streaming.
+     */
+    private fun sendMessageOllama(text: String) {
+        if (text.isBlank()) return
+
+        val userMessage = ChatMessage(
+            id = UUID.randomUUID().toString(),
+            role = MessageRole.USER,
+            content = text,
+            timestamp = System.currentTimeMillis()
+        )
+
+        _messages.value = _messages.value + userMessage
+        ollamaHistory.add(OllamaMessage(role = "user", content = text))
+
+        _isLoading.value = true
+        _isStreaming.value = true
+        _streamingContent.value = ""
+        _error.value = null
+        _lastResponseTime.value = null
+        _generationSpeed.value = null
+
+        scope.launch {
+            val startTime = System.currentTimeMillis()
+            AppLogger.info("ChatViewModel", "🔌 Отправка в локальную LLM (${_currentOllamaModel.value}): $text")
+
+            val systemPrompt = if (_collectionSettings.value.customSystemPrompt.isNotBlank()) {
+                _collectionSettings.value.customSystemPrompt
+            } else {
+                "Ты — дружелюбный AI-ассистент. Отвечай кратко и по делу на русском языке."
+            }
+
+            val allMessages = buildList {
+                add(OllamaMessage(role = "system", content = systemPrompt))
+                addAll(ollamaHistory)
+            }
+
+            val contentBuilder = StringBuilder()
+
+            try {
+                ollamaClient.chatStream(
+                    model = _currentOllamaModel.value,
+                    messages = allMessages.dropLast(1) + OllamaMessage(role = "user", content = text),
+                    systemPrompt = null // уже в messages
+                ).flowOn(Dispatchers.IO)
+                    .catch { e ->
+                        AppLogger.error("ChatViewModel", "❌ Ошибка streaming Ollama: ${e.message}")
+                        withContext(Dispatchers.Main) {
+                            _error.value = "Ошибка локальной LLM: ${e.message}"
+                            _isStreaming.value = false
+                            _isLoading.value = false
+                        }
+                    }
+                    .collect { chunk ->
+                        contentBuilder.append(chunk)
+                        withContext(Dispatchers.Main) {
+                            _streamingContent.value = "[Offline] ${contentBuilder}"
+                        }
+                    }
+
+                val endTime = System.currentTimeMillis()
+                val responseTime = endTime - startTime
+                val responseText = contentBuilder.toString()
+
+                // Примерная скорость (символов в секунду / 4 ≈ токенов в секунду для русского)
+                val charsPerSecond = if (responseTime > 0) {
+                    (responseText.length.toFloat() / responseTime * 1000)
+                } else 0f
+                val tokensPerSecond = charsPerSecond / 2 // ~2 символа на токен для русского
+
+                ollamaHistory.add(OllamaMessage(role = "assistant", content = responseText))
+
+                val assistantMessage = ChatMessage(
+                    id = UUID.randomUUID().toString(),
+                    role = MessageRole.ASSISTANT,
+                    content = "[Offline] $responseText",
+                    timestamp = System.currentTimeMillis()
+                )
+
+                withContext(Dispatchers.Main) {
+                    _messages.value = _messages.value + assistantMessage
+                    _streamingContent.value = ""
+                    _lastResponseTime.value = responseTime
+                    _generationSpeed.value = tokensPerSecond
+                    _isStreaming.value = false
+                    _isLoading.value = false
+                }
+
+                AppLogger.info(
+                    "ChatViewModel",
+                    "✅ Ответ от локальной LLM: ${responseText.take(100)}... " +
+                            "(${responseTime}ms, ~${String.format("%.1f", tokensPerSecond)} tok/s)"
+                )
+            } catch (e: Exception) {
+                AppLogger.error("ChatViewModel", "❌ Исключение Ollama: ${e.message}")
+                withContext(Dispatchers.Main) {
+                    _error.value = "Ошибка локальной LLM: ${e.message}"
+                    _isStreaming.value = false
+                    _isLoading.value = false
+                }
+            }
         }
     }
 
@@ -198,6 +339,26 @@ class ChatViewModel(
                 }
             } catch (e: Exception) {
                 AppLogger.error("ChatViewModel", "Исключение при streaming: ${e.message}")
+
+                // Пробуем автоматически переключиться на offline режим
+                val isNetworkError = e.message?.contains("connect", ignoreCase = true) == true ||
+                        e.message?.contains("timeout", ignoreCase = true) == true ||
+                        e.message?.contains("network", ignoreCase = true) == true ||
+                        e.message?.contains("socket", ignoreCase = true) == true
+
+                if (isNetworkError && tryFallbackToOffline()) {
+                    // Повторяем запрос через Ollama
+                    withContext(Dispatchers.Main) {
+                        _isLoading.value = false
+                        _isStreaming.value = false
+                        _error.value = "⚡ Переключено в офлайн режим"
+                    }
+                    // Удаляем последнее сообщение пользователя (оно уже добавлено)
+                    // и отправляем заново через Ollama
+                    sendMessageOllama(text)
+                    return@launch
+                }
+
                 withContext(Dispatchers.Main) {
                     _error.value = e.message ?: "Неизвестная ошибка"
                 }
@@ -330,7 +491,98 @@ class ChatViewModel(
         _conversationId.value = null
         _streamingContent.value = ""
         _error.value = null
+        ollamaHistory.clear()
         AppLogger.info("ChatViewModel", "Начат новый диалог")
+    }
+
+    // ========== Offline Mode (Ollama) ==========
+
+    /**
+     * Проверить доступность Ollama и загрузить список моделей.
+     */
+    fun checkOllamaAvailability() {
+        scope.launch {
+            val available = ollamaClient.isAvailable()
+            withContext(Dispatchers.Main) {
+                _ollamaAvailable.value = available
+            }
+            if (available) {
+                AppLogger.info("ChatViewModel", "🟢 Ollama доступен")
+                // Получаем список моделей
+                val models = ollamaClient.listModels()
+                withContext(Dispatchers.Main) {
+                    _availableOllamaModels.value = models
+                    // Если текущая модель не в списке — выбираем первую доступную
+                    if (models.isNotEmpty() && models.none { it.name == _currentOllamaModel.value }) {
+                        _currentOllamaModel.value = models.first().name
+                    }
+                }
+                if (models.isNotEmpty()) {
+                    AppLogger.info("ChatViewModel", "📦 Доступные модели: ${models.map { it.name }}")
+                }
+            } else {
+                AppLogger.warning("ChatViewModel", "🔴 Ollama недоступен")
+                withContext(Dispatchers.Main) {
+                    _availableOllamaModels.value = emptyList()
+                }
+            }
+        }
+    }
+
+    /**
+     * Обновить список моделей Ollama.
+     */
+    fun refreshOllamaModels() {
+        scope.launch {
+            if (_ollamaAvailable.value) {
+                val models = ollamaClient.listModels()
+                withContext(Dispatchers.Main) {
+                    _availableOllamaModels.value = models
+                }
+                AppLogger.info("ChatViewModel", "🔄 Обновлён список моделей: ${models.map { it.name }}")
+            }
+        }
+    }
+
+    /**
+     * Включить/выключить offline режим.
+     */
+    fun setOfflineMode(enabled: Boolean) {
+        if (enabled && !_ollamaAvailable.value) {
+            AppLogger.warning("ChatViewModel", "Нельзя включить offline режим — Ollama недоступен")
+            _error.value = "Ollama недоступен. Запустите: brew services start ollama"
+            return
+        }
+        _isOfflineMode.value = enabled
+        if (enabled) {
+            ollamaHistory.clear()
+            AppLogger.info("ChatViewModel", "🔌 Включён OFFLINE режим (локальная LLM: ${_currentOllamaModel.value})")
+        } else {
+            AppLogger.info("ChatViewModel", "🌐 Включён ONLINE режим (сервер)")
+        }
+    }
+
+    /**
+     * Установить модель Ollama.
+     */
+    fun setOllamaModel(model: String) {
+        _currentOllamaModel.value = model
+        AppLogger.info("ChatViewModel", "Ollama модель: $model")
+    }
+
+    /**
+     * Попробовать автоматически переключиться в offline режим при ошибке сети.
+     */
+    private suspend fun tryFallbackToOffline(): Boolean {
+        if (_ollamaAvailable.value || ollamaClient.isAvailable()) {
+            withContext(Dispatchers.Main) {
+                _ollamaAvailable.value = true
+                _isOfflineMode.value = true
+            }
+            AppLogger.info("ChatViewModel", "⚡ Автоматический переход в offline режим")
+            return true
+        }
+        return false
     }
 
     // ========== Notification Polling ==========

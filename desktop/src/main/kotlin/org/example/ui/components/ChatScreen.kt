@@ -54,8 +54,22 @@ fun ChatScreen(viewModel: ChatViewModel) {
     val collectionSettings by viewModel.collectionSettings.collectAsState()
     val currentNotification by viewModel.currentNotification.collectAsState()
 
+    // Offline mode state
+    val isOfflineMode by viewModel.isOfflineMode.collectAsState()
+    val ollamaAvailable by viewModel.ollamaAvailable.collectAsState()
+    val currentOllamaModel by viewModel.currentOllamaModel.collectAsState()
+    val availableOllamaModels by viewModel.availableOllamaModels.collectAsState()
+    val lastResponseTime by viewModel.lastResponseTime.collectAsState()
+    val generationSpeed by viewModel.generationSpeed.collectAsState()
+
     var inputText by remember { mutableStateOf("") }
+    var modelDropdownExpanded by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+
+    // Проверяем доступность Ollama при запуске
+    LaunchedEffect(Unit) {
+        viewModel.checkOllamaAvailability()
+    }
 
     // Автоскролл при новых сообщениях или streaming контенте
     LaunchedEffect(messages.size, streamingContent) {
@@ -122,7 +136,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
 
                 // Переключатель режима решения задач
                 Row(
-                    modifier = Modifier.padding(horizontal = 8.dp).padding(bottom = 8.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp).padding(bottom = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -153,6 +167,188 @@ fun ChatScreen(viewModel: ChatViewModel) {
                             modifier = Modifier.height(28.dp)
                         )
                     }
+                }
+
+                // Переключатель Offline/Online режима
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp).padding(bottom = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Индикатор статуса
+                    Surface(
+                        color = if (isOfflineMode) {
+                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)
+                        } else {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                        },
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isOfflineMode) "🔌" else "🌐",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                            Text(
+                                text = if (isOfflineMode) "Offline" else "Online",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = if (isOfflineMode) {
+                                    MaterialTheme.colorScheme.tertiary
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                }
+                            )
+                        }
+                    }
+
+                    // Переключатель
+                    Switch(
+                        checked = isOfflineMode,
+                        onCheckedChange = { enabled ->
+                            viewModel.setOfflineMode(enabled)
+                        },
+                        enabled = ollamaAvailable || isOfflineMode,
+                        modifier = Modifier.height(24.dp)
+                    )
+
+                    // Индикатор доступности Ollama
+                    if (!ollamaAvailable) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = "Ollama недоступен",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    } else if (isOfflineMode && availableOllamaModels.isNotEmpty()) {
+                        // Выбор модели (dropdown)
+                        Box {
+                            Surface(
+                                onClick = { modelDropdownExpanded = true },
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "📦",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                    Text(
+                                        text = currentOllamaModel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                    Text(
+                                        text = "▼",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+
+                            DropdownMenu(
+                                expanded = modelDropdownExpanded,
+                                onDismissRequest = { modelDropdownExpanded = false }
+                            ) {
+                                availableOllamaModels.forEach { model ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = model.name,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                                Text(
+                                                    text = formatModelSize(model.size),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                                )
+                                            }
+                                        },
+                                        onClick = {
+                                            viewModel.setOllamaModel(model.name)
+                                            modelDropdownExpanded = false
+                                        },
+                                        leadingIcon = {
+                                            if (model.name == currentOllamaModel) {
+                                                Text("✓", color = MaterialTheme.colorScheme.primary)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Статистика генерации (показываем только в offline режиме после получения ответа)
+                if (isOfflineMode && (lastResponseTime != null || generationSpeed != null)) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp).padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Время ответа
+                        lastResponseTime?.let { time ->
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("⏱️", style = MaterialTheme.typography.labelSmall)
+                                    Text(
+                                        text = formatResponseTime(time),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+
+                        // Скорость генерации
+                        generationSpeed?.let { speed ->
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("⚡", style = MaterialTheme.typography.labelSmall)
+                                    Text(
+                                        text = "${String.format("%.1f", speed)} tok/s",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Spacer(modifier = Modifier.height(4.dp))
                 }
             }
         }
@@ -699,6 +895,24 @@ private fun getSolveModeLabel(mode: CollectionMode): String {
         CollectionMode.SOLVE_STEP_BY_STEP -> "Пошаговый"
         CollectionMode.SOLVE_EXPERT_PANEL -> "Эксперты"
         else -> "Другой"
+    }
+}
+
+private fun formatModelSize(bytes: Long): String {
+    return when {
+        bytes >= 1_000_000_000 -> String.format("%.1f GB", bytes / 1_000_000_000.0)
+        bytes >= 1_000_000 -> String.format("%.0f MB", bytes / 1_000_000.0)
+        bytes >= 1_000 -> String.format("%.0f KB", bytes / 1_000.0)
+        bytes > 0 -> "$bytes B"
+        else -> ""
+    }
+}
+
+private fun formatResponseTime(ms: Long): String {
+    return when {
+        ms >= 60_000 -> String.format("%.1f мин", ms / 60_000.0)
+        ms >= 1_000 -> String.format("%.1f сек", ms / 1_000.0)
+        else -> "$ms мс"
     }
 }
 
