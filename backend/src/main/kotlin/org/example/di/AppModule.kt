@@ -13,6 +13,7 @@ import org.example.data.ConversationRepository
 import org.example.data.DeepSeekClient
 import org.example.data.InMemoryConversationRepository
 import org.example.data.LLMClient
+import org.example.data.OllamaLLMClient
 import org.example.data.PostgresConversationRepository
 import org.example.data.RedisConversationRepository
 import org.example.data.ReminderRepository
@@ -34,6 +35,52 @@ enum class StorageType {
     MEMORY,
     REDIS,
     POSTGRES
+}
+
+/**
+ * Тип LLM провайдера.
+ */
+enum class LLMProvider {
+    DEEPSEEK,
+    OLLAMA
+}
+
+/**
+ * Конфигурация для LLM провайдера.
+ *
+ * @param provider тип провайдера (deepseek, ollama)
+ * @param ollamaUrl URL для Ollama API
+ * @param ollamaModel модель Ollama
+ */
+data class LLMConfig(
+    val provider: LLMProvider = LLMProvider.DEEPSEEK,
+    val ollamaUrl: String = "http://localhost:11434",
+    val ollamaModel: String = "qwen2.5:0.5b"
+) {
+    companion object {
+        /**
+         * Создаёт конфигурацию из переменных окружения:
+         * - LLM_PROVIDER=deepseek|ollama — тип провайдера
+         * - OLLAMA_URL=http://host:11434 — URL Ollama API
+         * - OLLAMA_MODEL=qwen2.5:0.5b — модель Ollama
+         */
+        fun fromEnv(): LLMConfig {
+            val providerStr = System.getenv("LLM_PROVIDER")?.lowercase() ?: "deepseek"
+            val provider = when (providerStr) {
+                "ollama" -> LLMProvider.OLLAMA
+                else -> LLMProvider.DEEPSEEK
+            }
+
+            val ollamaUrl = System.getenv("OLLAMA_URL") ?: "http://localhost:11434"
+            val ollamaModel = System.getenv("OLLAMA_MODEL") ?: "qwen2.5:0.5b"
+
+            return LLMConfig(
+                provider = provider,
+                ollamaUrl = ollamaUrl,
+                ollamaModel = ollamaModel
+            )
+        }
+    }
 }
 
 /**
@@ -129,15 +176,31 @@ private fun createDataSource(config: RepositoryConfig): HikariDataSource {
  * Модуль DI для backend приложения.
  * Определяет все зависимости и их связи.
  *
- * @param apiKey API ключ для DeepSeek
+ * @param apiKey API ключ для DeepSeek (может быть пустым при использовании Ollama)
  * @param repositoryConfig конфигурация репозитория (In-Memory, Redis или PostgreSQL)
+ * @param llmConfig конфигурация LLM провайдера (DeepSeek или Ollama)
  */
 fun appModule(
     apiKey: String,
-    repositoryConfig: RepositoryConfig = RepositoryConfig.fromEnv()
+    repositoryConfig: RepositoryConfig = RepositoryConfig.fromEnv(),
+    llmConfig: LLMConfig = LLMConfig.fromEnv()
 ) = module {
     // Data layer
-    single<LLMClient> { DeepSeekClient(apiKey) }
+    single<LLMClient> {
+        when (llmConfig.provider) {
+            LLMProvider.OLLAMA -> {
+                logger.info("🤖 Using Ollama LLM: ${llmConfig.ollamaUrl} (model: ${llmConfig.ollamaModel})")
+                OllamaLLMClient(
+                    baseUrl = llmConfig.ollamaUrl,
+                    defaultModel = llmConfig.ollamaModel
+                )
+            }
+            LLMProvider.DEEPSEEK -> {
+                logger.info("🌐 Using DeepSeek LLM API")
+                DeepSeekClient(apiKey)
+            }
+        }
+    }
 
     single<ConversationRepository> {
         when (repositoryConfig.storageType) {
