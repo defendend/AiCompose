@@ -29,8 +29,10 @@ import org.example.ui.components.ServerLogWindow
 import org.example.ui.components.SettingsScreen
 import org.example.ui.components.SupportScreen
 import org.example.ui.components.TeamScreen
+import org.example.ui.components.OllamaComparisonScreen
 import org.example.ui.McpViewModel
 import org.example.ui.ModelComparisonViewModel
+import org.example.ui.OllamaComparisonViewModel
 import org.example.ui.SupportViewModel
 import org.example.ui.TeamViewModel
 import org.example.ui.theme.AppTheme
@@ -41,6 +43,7 @@ enum class Screen {
     CHAT,
     SETTINGS,
     MODEL_COMPARISON,
+    OLLAMA_BENCHMARK,
     MCP_SERVERS,
     SUPPORT,
     TEAM
@@ -64,6 +67,7 @@ private fun ApplicationScope.App() {
     val conversationListViewModel: ConversationListViewModel = koinInject()
     val apiClient: ChatApiClient = koinInject()
     val modelComparisonViewModel = remember { ModelComparisonViewModel() }
+    val ollamaComparisonViewModel = remember { OllamaComparisonViewModel() }
     val mcpViewModel = remember { McpViewModel() }
     val supportViewModel = remember { SupportViewModel(apiClient) }
     val teamViewModel = remember { TeamViewModel(apiClient) }
@@ -105,6 +109,7 @@ private fun ApplicationScope.App() {
                     onToggleServerLogs = { showServerLogWindow = !showServerLogWindow },
                     onOpenSettings = { currentScreen = Screen.SETTINGS },
                     onOpenModelComparison = { currentScreen = Screen.MODEL_COMPARISON },
+                    onOpenOllamaBenchmark = { currentScreen = Screen.OLLAMA_BENCHMARK },
                     onOpenMcpServers = { currentScreen = Screen.MCP_SERVERS },
                     onOpenSupport = { currentScreen = Screen.SUPPORT },
                     onOpenTeam = { currentScreen = Screen.TEAM }
@@ -132,6 +137,12 @@ private fun ApplicationScope.App() {
                 Screen.MODEL_COMPARISON -> {
                     ModelComparisonScreen(
                         viewModel = modelComparisonViewModel,
+                        onBack = { currentScreen = Screen.CHAT }
+                    )
+                }
+                Screen.OLLAMA_BENCHMARK -> {
+                    OllamaComparisonScreen(
+                        viewModel = ollamaComparisonViewModel,
                         onBack = { currentScreen = Screen.CHAT }
                     )
                 }
@@ -179,6 +190,7 @@ private fun MainContent(
     onToggleServerLogs: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenModelComparison: () -> Unit,
+    onOpenOllamaBenchmark: () -> Unit,
     onOpenMcpServers: () -> Unit,
     onOpenSupport: () -> Unit,
     onOpenTeam: () -> Unit
@@ -339,6 +351,16 @@ private fun MainContent(
                                 },
                                 leadingIcon = {
                                     Text("🔬")
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Бенчмарк Ollama") },
+                                onClick = {
+                                    showMenu = false
+                                    onOpenOllamaBenchmark()
+                                },
+                                leadingIcon = {
+                                    Text("🦙")
                                 }
                             )
                             DropdownMenuItem(
