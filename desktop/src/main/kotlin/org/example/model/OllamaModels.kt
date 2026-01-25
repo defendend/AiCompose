@@ -41,14 +41,6 @@ object AvailableOllamaModels {
             description = "Alibaba Qwen 2.5, хорош для кода",
             contextSize = 32000,
             category = OllamaBenchmarkCategory.LARGE
-        ),
-        OllamaBenchmarkModel(
-            id = "phi3:3.8b",
-            name = "Phi-3 3.8B",
-            parameters = "3.8B",
-            description = "Microsoft Phi-3, компактная но мощная",
-            contextSize = 4096,
-            category = OllamaBenchmarkCategory.LARGE
         )
     )
 
@@ -59,14 +51,6 @@ object AvailableOllamaModels {
             parameters = "1.5B",
             description = "Рекомендуемая: лучший баланс скорости и качества",
             contextSize = 32000,
-            category = OllamaBenchmarkCategory.MEDIUM
-        ),
-        OllamaBenchmarkModel(
-            id = "gemma2:2b",
-            name = "Gemma 2 2B",
-            parameters = "2B",
-            description = "Google Gemma 2, быстрая и качественная",
-            contextSize = 8000,
             category = OllamaBenchmarkCategory.MEDIUM
         ),
         OllamaBenchmarkModel(
@@ -86,14 +70,6 @@ object AvailableOllamaModels {
             parameters = "0.5B",
             description = "Самая быстрая, для простых задач",
             contextSize = 32000,
-            category = OllamaBenchmarkCategory.SMALL
-        ),
-        OllamaBenchmarkModel(
-            id = "tinyllama:1.1b",
-            name = "TinyLlama 1.1B",
-            parameters = "1.1B",
-            description = "Миниатюрная Llama для быстрых ответов",
-            contextSize = 2048,
             category = OllamaBenchmarkCategory.SMALL
         )
     )

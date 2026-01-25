@@ -1,0 +1,88 @@
+{
+  "server_metrics": {
+    "timestamp": "2024-01-24T16:00:00Z",
+    "cpu_usage_percent": 75.5,
+    "memory_usage_percent": 68.2,
+    "disk_usage_percent": 45.8,
+    "network_in_mbps": 125.3,
+    "network_out_mbps": 89.7,
+    "active_connections": 1247,
+    "response_time_ms": {
+      "avg": 145,
+      "p50": 120,
+      "p95": 350,
+      "p99": 800
+    }
+  },
+  "database_metrics": {
+    "timestamp": "2024-01-24T16:00:00Z",
+    "connection_pool_size": 50,
+    "active_connections": 42,
+    "query_performance": {
+      "avg_query_time_ms": 25.8,
+      "slow_queries_count": 3,
+      "failed_queries_count": 1
+    },
+    "cache_hit_ratio": 0.82,
+    "lock_waits": 2,
+    "deadlocks": 0
+  },
+  "application_metrics": {
+    "timestamp": "2024-01-24T16:00:00Z",
+    "requests_per_second": 245,
+    "error_rate_percent": 2.1,
+    "user_sessions": 156,
+    "page_load_times": {
+      "homepage_ms": 890,
+      "products_ms": 1240,
+      "checkout_ms": 1580,
+      "dashboard_ms": 650
+    },
+    "feature_usage": {
+      "search": 89,
+      "add_to_cart": 45,
+      "checkout": 23,
+      "support": 12,
+      "analytics": 8
+    }
+  },
+  "business_metrics": {
+    "timestamp": "2024-01-24T16:00:00Z",
+    "daily_revenue": 15420.75,
+    "conversion_rate_percent": 3.8,
+    "average_order_value": 670.25,
+    "cart_abandonment_rate_percent": 68.5,
+    "new_users": 34,
+    "returning_users": 122,
+    "bounce_rate_percent": 42.3
+  },
+  "error_metrics": {
+    "timestamp": "2024-01-24T16:00:00Z",
+    "total_errors": 127,
+    "error_types": {
+      "4xx_errors": 89,
+      "5xx_errors": 38,
+      "database_errors": 12,
+      "payment_errors": 8,
+      "authentication_errors": 5,
+      "api_timeout_errors": 15
+    },
+    "top_error_pages": [
+      {
+        "page": "/checkout",
+        "errors": 23,
+        "error_rate": "4.8%"
+      },
+      {
+        "page": "/products",
+        "errors": 18,
+        "error_rate": "2.1%"
+      },
+      {
+        "page": "/api/payments",
+        "errors": 15,
+        "error_rate": "12.5%"
+      }
+    ]
+  }
+}

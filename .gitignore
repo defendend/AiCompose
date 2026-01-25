@@ -45,4 +45,6 @@ bin/
 .DS_Store
 
 ### Claude ###
-.claude/
+# Приватная конфигурация (серверные данные, ключи)
+.claude/CLAUDE.local.md
+.claude/settings.local.json

@@ -36,6 +36,8 @@ import org.example.ui.OllamaComparisonViewModel
 import org.example.ui.SupportViewModel
 import org.example.ui.TeamViewModel
 import org.example.ui.theme.AppTheme
+import org.example.analytics.screen.AnalyticsScreen
+import org.example.analytics.viewmodel.AnalyticsViewModel
 import org.koin.compose.KoinApplication
 import org.koin.compose.koinInject
 
@@ -46,7 +48,8 @@ enum class Screen {
     OLLAMA_BENCHMARK,
     MCP_SERVERS,
     SUPPORT,
-    TEAM
+    TEAM,
+    ANALYTICS
 }
 
 fun main() = application {
@@ -66,6 +69,7 @@ private fun ApplicationScope.App() {
     val chatViewModel: ChatViewModel = koinInject()
     val conversationListViewModel: ConversationListViewModel = koinInject()
     val apiClient: ChatApiClient = koinInject()
+    val analyticsViewModel: AnalyticsViewModel = koinInject()
     val modelComparisonViewModel = remember { ModelComparisonViewModel() }
     val ollamaComparisonViewModel = remember { OllamaComparisonViewModel() }
     val mcpViewModel = remember { McpViewModel() }
@@ -112,7 +116,8 @@ private fun ApplicationScope.App() {
                     onOpenOllamaBenchmark = { currentScreen = Screen.OLLAMA_BENCHMARK },
                     onOpenMcpServers = { currentScreen = Screen.MCP_SERVERS },
                     onOpenSupport = { currentScreen = Screen.SUPPORT },
-                    onOpenTeam = { currentScreen = Screen.TEAM }
+                    onOpenTeam = { currentScreen = Screen.TEAM },
+                    onOpenAnalytics = { currentScreen = Screen.ANALYTICS }
                 )
                 Screen.SETTINGS -> {
                     val collectionSettings by chatViewModel.collectionSettings.collectAsState()
@@ -164,6 +169,12 @@ private fun ApplicationScope.App() {
                         onBack = { currentScreen = Screen.CHAT }
                     )
                 }
+                Screen.ANALYTICS -> {
+                    AnalyticsScreen(
+                        viewModel = analyticsViewModel,
+                        onBack = { currentScreen = Screen.CHAT }
+                    )
+                }
             }
         }
     }
@@ -193,7 +204,8 @@ private fun MainContent(
     onOpenOllamaBenchmark: () -> Unit,
     onOpenMcpServers: () -> Unit,
     onOpenSupport: () -> Unit,
-    onOpenTeam: () -> Unit
+    onOpenTeam: () -> Unit,
+    onOpenAnalytics: () -> Unit
 ) {
     val collectionSettings by chatViewModel.collectionSettings.collectAsState()
     val conversations by conversationListViewModel.conversations.collectAsState()
@@ -361,6 +373,16 @@ private fun MainContent(
                                 },
                                 leadingIcon = {
                                     Text("🦙")
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Локальный аналитик") },
+                                onClick = {
+                                    showMenu = false
+                                    onOpenAnalytics()
+                                },
+                                leadingIcon = {
+                                    Text("📊")
                                 }
                             )
                             DropdownMenuItem(

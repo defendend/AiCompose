@@ -134,7 +134,10 @@ class OllamaBenchmarkClient(
                 )
             }
 
-            val generateResponse = response.body<OllamaGenerateResponse>()
+            // Ollama возвращает application/x-ndjson — несколько JSON объектов по строкам
+            // Нужно объединить все части ответа
+            val responseText = response.bodyAsText()
+            val generateResponse = parseNdjsonResponse(responseText)
 
             val responseContent = generateResponse.response
             val responseLength = responseContent.length
@@ -176,6 +179,39 @@ class OllamaBenchmarkClient(
                 error = e.message ?: "Неизвестная ошибка"
             )
         }
+    }
+
+    /**
+     * Парсит NDJSON ответ от Ollama.
+     * Ollama возвращает несколько JSON объектов, по одному на строку.
+     * Нужно объединить все "response" поля и взять метаданные из последней строки.
+     */
+    private fun parseNdjsonResponse(ndjson: String): OllamaGenerateResponse {
+        val lines = ndjson.trim().lines().filter { it.isNotBlank() }
+
+        if (lines.isEmpty()) {
+            return OllamaGenerateResponse()
+        }
+
+        // Собираем все части ответа
+        val responseParts = StringBuilder()
+        var lastResponse: OllamaGenerateResponse? = null
+
+        for (line in lines) {
+            try {
+                val parsed = jsonParser.decodeFromString<OllamaGenerateResponse>(line)
+                responseParts.append(parsed.response)
+                if (parsed.done) {
+                    lastResponse = parsed
+                }
+            } catch (e: Exception) {
+                AppLogger.warning("OllamaBenchmark", "Не удалось распарсить строку NDJSON: $line")
+            }
+        }
+
+        // Возвращаем объединённый ответ с метаданными из последней строки
+        return lastResponse?.copy(response = responseParts.toString())
+            ?: OllamaGenerateResponse(response = responseParts.toString(), done = true)
     }
 
     fun close() {
